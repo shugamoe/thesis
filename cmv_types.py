@@ -2,8 +2,13 @@
 #
 #
 
+import pdb
 from utils import can_fail
 import praw
+from cmv_tables import CMVSub
+
+
+
 # Would like to have this inherit from praw"s submissions class but with the way
 # I"m scraping the data I would have to tinker with a praw"s sublisting class
 # and subreddit class.
@@ -11,37 +16,50 @@ class CMVSubmission:
     """
     A class of a /r/changemyview submission
     """
-    STATS_TEMPLATE = {"num_root_comments": 0,
-                      "num_user_comments": 0,
-                      "num_OP_comments": 0,
-                      "OP_gave_delta": False,
-                      "num_deltas_from_OP": 0,
-                      "created_utc": None,
+    sqla_mapping = CMVSub
+    STATS_TEMPLATE = {"reddit_id": None,
+                      "author": None,
+                      "date_utc": None,
+                      "title": None,
                       "content": None,
-                      "title": None}
+                      "score": None,
+                      "delta_from_author": False,
+                      "direct_comments": 0,
+                      "total_comments": 0,
+                      "author_comments": 0,
+                      "num_deltas_from_author": 0}
 
     @can_fail
-    def __init__(self, sub_inst):
+    def __init__(self, sub_inst, db_session):
         self.submission = sub_inst
+        self.db_session = db_session
 
-        try:
-            self.author = self.submission.author.name
-        except AttributeError:
-            self.author = "[removed]"
-        print(self.author)
-
-        # Important Variables to track
-        self.stats = {"num_root_comments": 0,
-                      "num_user_comments": 0,
-                      "OP_gave_delta": False,
-                      "created_utc": None,
-                      "num_OP_comments": 0,
-                      "num_deltas_from_OP": 0,
+        self.stats = {"reddit_id": None,
+                      "author": None,
+                      "date_utc": None,
+                      "title": None,
                       "content": None,
-                      "title": None}
+                      "score": None,
+                      "delta_from_author": False,
+                      "direct_comments": 0,
+                      "total_comments": 0,
+                      "author_comments": 0,
+                      "num_deltas_from_author": 0}
+
+        # Get author first
+        try:
+            self.stats["author"] = self.submission.author.name
+        except AttributeError:
+            self.stats["author"] = "[deleted]"
+
+        # Gather info from submission itself
+        self.stats["reddit_id"] = self.submission.id
         self.stats["content"] = self.submission.selftext
         self.stats["title"] = self.submission.title
-        self.stats["created_utc"] = self.submission.created_utc
+        self.stats["date_utc"] = self.submission.created_utc
+        self.stats["score"] = self.submission.score
+
+        # Gather info from submission's comments
         self.parse_root_comments(self.submission.comments)
 
     @can_fail
@@ -54,13 +72,11 @@ class CMVSubmission:
             elif com.stickied:
                 continue # Sticked comments are not replies to view
             else:
-                self.stats["num_user_comments"] += 1
-                self.stats["num_root_comments"] += 1
-                if str(com.author) == self.author:
+                self.stats["total_comments"] += 1
+                self.stats["direct_comments"] += 1
+                if str(com.author) == self.stats["author"]:
                     self.stats["num_OP_comments"] += 1
                 self.parse_replies(com.replies)
-
-        self.parsed = True
 
     @can_fail
     def parse_replies(self, reply_tree):
@@ -73,9 +89,9 @@ class CMVSubmission:
                 if str(reply.author) == "DeltaBot":
                     self.parse_delta_bot_comment(reply)
                 else:
-                    self.stats["num_user_comments"] += 1
+                    self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
-                self.stats["num_user_comments"] += 1
+                self.stats["total_comments"] += 1
 
             # Check for OP comments
             try:
@@ -98,18 +114,17 @@ class CMVSubmission:
             # actually responded to a comment and not a submission.
             # (Submission are always by OP, comments are not.)
             if isinstance(parent_com, praw.models.Comment):
-                if parent_com.author.name == self.author:
-                    self.stats["OP_gave_delta"] = True
-                    self.stats["num_deltas_from_OP"] += 1
+                if parent_com.author.name == self.stats["author"]:
+                    self.stats["delta_from_author"] = True
+                    self.stats["num_deltas_from_author"] += 1
     
-    def get_stats_series(self):
+    def save_to_db(self):
         """
-        This function returns a series so this class can update the submissions
-        dataframe
+        Writes the stats of the object to the SQL datebase
         """
-        info_series = pd.Series(self.stats)
-        info_series.sort_index(inplace=True)
-        return info_series
+        sqla_obj = self.sqla_mapping(**self.stats)
+        self.db_session.add(sqla_obj)
+        self.db_session.commit()
 
 
 # TODO(jcm): Implement the inheritance from praw"s Redditor class, would be a 
@@ -353,10 +368,3 @@ class CMVAuthComment:
         info_series.sort_index(inplace=True)
         return info_series
 
-if __name__ == "__main__":
-    SModder = CMVScraperModder(START_2016, END_2016)
-
-    SModder.update_cmv_submissions()
-    SModder.update_author_history()
-    with open("test.pkl", "wb") as output:
-        pickle.dump(SModder, output)
