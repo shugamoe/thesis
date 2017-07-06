@@ -1,15 +1,10 @@
-# File for initializing tables in cmv_related.db
-# 
-#
+"""
+File for initializing tables in cmv_related.db
+"""
 
 from sqlalchemy import create_engine, Column, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-
-engine = create_engine("sqlite:////home/jcm/thesis/cmv_related.db", echo=True)
-Session = sessionmaker(bind=engine)
-
-session = Session()
 
 Base = declarative_base()
 
@@ -25,19 +20,29 @@ class RedditContentMixin(object):
     content = Column(String)
     score = Column(Integer)
 
-class CMVSub(RedditContentMixin, Base):
+class SubmissionMixin(RedditContentMixin):
+    """
+    Columns that ought to be common to any submission on Reddit
+    """
+    direct_comments = Column(Integer)
+    total_comments = Column(Integer)
+    author_comments = Column(Integer)
+    unique_participants = Column(Integer)
+    subreddit = Column(String)
+
+class CMVSub(SubmissionMixin, Base):
     __tablename__ = "CMV_Submissions"
 
     # Post Interaction Info
     delta_from_author = Column(Boolean)
     num_deltas_from_author = Column(Integer)
-    direct_comments = Column(Integer)
-    total_comments = Column(Integer)
-    author_comments = Column(Integer)
-    unique_participants = Column(Integer)
+
+class AuthSub(SubmissionMixin, Base):
+    __tablename__ = "CMV_Author_Submissions"
 
 
-def init_tables():
+
+def init_tables(engine):
     """
     File for initializing tables in cmv_related.db
     """
@@ -72,6 +77,6 @@ def init_tables():
 # print(session.query(CmvSub.reddit_id).first())
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     pass
 

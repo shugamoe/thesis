@@ -43,7 +43,7 @@ class CMVScraperModder:
         session = sessionmaker(bind=self.engine)
         self.session = session()
         if new_tables:
-            CMVScraperModder.init_tables()
+            CMVScraperModder.init_tables(self.engine)
 
         # PRAW objects
         self.praw_agent = praw.Reddit("cmv_scrape", # Site ID
@@ -68,11 +68,11 @@ class CMVScraperModder:
         self.eg_user = self.praw_agent.redditor("RocketCity1234")
 
     @staticmethod
-    def init_tables():
+    def init_tables(engine):
         """
         Create new tables in db
         """
-        init_tables()
+        init_tables(engine)
 
     @staticmethod
     def arg_parser():

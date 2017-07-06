@@ -1,6 +1,7 @@
-# File that holds objects that handle the scraping of the related CMV data types of interest.
-#
-#
+"""
+File that holds objects that handle the scraping of the related CMV data types of interest.
+"""
+
 
 import pdb
 from utils import can_fail
@@ -17,17 +18,6 @@ class CMVSubmission:
     A class of a /r/changemyview submission
     """
     sqla_mapping = CMVSub
-    STATS_TEMPLATE = {"reddit_id": None,
-                      "author": None,
-                      "date_utc": None,
-                      "title": None,
-                      "content": None,
-                      "score": None,
-                      "delta_from_author": False,
-                      "direct_comments": 0,
-                      "total_comments": 0,
-                      "author_comments": 0,
-                      "num_deltas_from_author": 0}
 
     @can_fail
     def __init__(self, sub_inst, db_session):
@@ -35,6 +25,7 @@ class CMVSubmission:
         self.db_session = db_session
 
         self.stats = {"reddit_id": None,
+                      "subreddit": None,
                       "author": None,
                       "date_utc": None,
                       "title": None,
@@ -54,6 +45,7 @@ class CMVSubmission:
 
         # Gather info from submission itself
         self.stats["reddit_id"] = self.submission.id
+        self.stats["subreddit"] = self.submission.subreddit_name_prefixed
         self.stats["content"] = self.submission.selftext
         self.stats["title"] = self.submission.title
         self.stats["date_utc"] = self.submission.created_utc
