@@ -17,18 +17,19 @@ class RedditContentMixin(object):
     author = Column(String)
     date_utc = Column(Integer)
     title = Column(String)
-    content = Column(String)
     score = Column(Integer)
+    subreddit = Column(String(20))
+    edited = Column(Boolean)
 
 class SubmissionMixin(RedditContentMixin):
     """
     Columns that ought to be common to any submission on Reddit
     """
+    content = Column(String(40000))
     direct_comments = Column(Integer)
     total_comments = Column(Integer)
     author_comments = Column(Integer)
     unique_participants = Column(Integer)
-    subreddit = Column(String)
 
 class CMVSub(SubmissionMixin, Base):
     __tablename__ = "CMV_Submissions"
@@ -36,6 +37,14 @@ class CMVSub(SubmissionMixin, Base):
     # Post Interaction Info
     delta_from_author = Column(Boolean)
     num_deltas_from_author = Column(Integer)
+
+class Comment(RedditContentMixin, Base):
+    __tablename__ = "Comments"
+    content = Column(String(10000))
+    parent_submission_id = 
+    
+
+
 
 class AuthSub(SubmissionMixin, Base):
     __tablename__ = "CMV_Author_Submissions"

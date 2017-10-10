@@ -34,12 +34,15 @@ class CMVScraperModder:
     """
     Class to scrape /r/changemyview for MACS 302 and possibly thesis.
     """
-    def __init__(self, start_date, end_date, new_tables, db_loc):
+    def __init__(self, start_date, end_date, new_tables, pwd_file):
         """
         Initializes the class with an instance of the praw.Reddit class.
         """
+        with open(pwd_file, 'r') as f:
+            password = f.read()[:-1]
+
         # sqlalchemy connection
-        self.engine = create_engine("sqlite:///" + db_loc, echo=True)
+        self.engine = sqlalchemy.create_engine('mysql://jmcclellan:{}@mpcs53001.cs.uchicago.edu'.format(password), echo=True)
         session = sessionmaker(bind=self.engine)
         self.session = session()
         if new_tables:
@@ -86,8 +89,8 @@ class CMVScraperModder:
                             help="End Date (UTC Epoch) of CMV Submissions to gather")
         parser.add_argument("--new_tables", action="store_false", # Stores True as default lol
                             help="Creates new tables in the database")
-        parser.add_argument("--db_loc", type=str, default="cmv_related.db",
-                            help="Location of the sqlite3 database")
+        parser.add_argument("--pwd_file", type=str, default="pwd.txt",
+                            help="File containing the password")
 
         parser_args = parser.parse_args()
 
