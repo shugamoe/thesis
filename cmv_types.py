@@ -6,7 +6,7 @@ File that holds objects that handle the scraping of the related CMV data types o
 import pdb
 from utils import can_fail
 import praw
-from cmv_tables import CMVSub
+from cmv_tables import CMVSubSchema, SubmissionSchema, CommentSchema
 
 
 
@@ -17,7 +17,7 @@ class CMVSubmission:
     """
     A class of a /r/changemyview submission
     """
-    sqla_mapping = CMVSub
+    sqla_mapping = CMVSubSchema
 
     @can_fail
     def __init__(self, sub_inst, db_session):
@@ -27,15 +27,17 @@ class CMVSubmission:
         self.stats = {"reddit_id": None,
                       "subreddit": None,
                       "author": None,
-                      "date_utc": None,
+                      "created_utc": None,
                       "title": None,
                       "content": None,
                       "score": None,
+                      "edited": None,
                       "delta_from_author": False,
                       "direct_comments": 0,
                       "total_comments": 0,
                       "author_comments": 0,
                       "num_deltas_from_author": 0}
+        self.unique_users = set()
 
         # Get author first
         try:
@@ -48,8 +50,10 @@ class CMVSubmission:
         self.stats["subreddit"] = self.submission.subreddit_name_prefixed
         self.stats["content"] = self.submission.selftext
         self.stats["title"] = self.submission.title
-        self.stats["date_utc"] = self.submission.created_utc
+        self.stats["created_utc"] = self.submission.created_utc
         self.stats["score"] = self.submission.score
+        self.stats["edited"] = self.submission.edited
+        self.unique_participants = len(self.unique_users)
 
         # Gather info from submission's comments
         self.parse_root_comments(self.submission.comments)
@@ -66,8 +70,14 @@ class CMVSubmission:
             else:
                 self.stats["total_comments"] += 1
                 self.stats["direct_comments"] += 1
-                if str(com.author) == self.stats["author"]:
+                try:
+                    com_author = com.author.name
+                except AttributeError: # If author is None, then user is deleted
+                    self.stats["has_deleted_user"] = True
+                    com_author = "[deleted]"
+                if com_author == self.stats["author"]:
                     self.stats["num_OP_comments"] += 1
+                self.unique_users.add(com_author)
                 self.parse_replies(com.replies)
 
     @can_fail
@@ -90,7 +100,7 @@ class CMVSubmission:
                 if str(reply.author) == self.author:
                     self.stats["num_OP_comments"] += 1
                 else:
-                    self.stats["num_user_comments"] += 1
+                    self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
                 pass
 
@@ -125,24 +135,13 @@ class CMVSubAuthor:
     """
     Class for scraping the history of an author of /r/changemyview
     """
-    STATS_TEMPLATE = {"sub_id": [],
-                      "com_id": [],
-                      "sub_inst": [],
-                      "com_inst": [],
-                      "com_newest": []}
-    def __init__(self, redditor_inst):
+    def __init__(self, redditor_inst, session):
         """
         """
         self.user = redditor_inst
         self.user_name = redditor_inst.name
+        self.db_session = session
 
-        # Important variables to track
-        self.history = {"sub_id": [],
-                        "com_id": [],
-                        "sub_inst": [],
-                        "com_inst": [],
-                        "com_newest": []}
-    
     @can_fail
     def get_history_for(self, post_type):
         """
@@ -155,10 +154,15 @@ class CMVSubAuthor:
         post_prefix = post_type[:3]
         for post in posts:
             posts_retrieved += 1
-            self.history[post_prefix + "_id"].append(post.id)
-            self.history[post_prefix + "_inst"].append(post)
+
+            # Scrape data from submission or comment
             if post_prefix == "com":
-                self.history["com_newest"].append(True)
+                Comment(post, self.db_session).save_to_db()
+            else:
+                if post.subreddit == "r/changemyview":
+                    CMVSubmission(post, self.db_session).save_to_db()
+                else:
+                    Submission(post, self.db_session).save_to_db()
 
         if posts_retrieved in  [999, 1000]:
             print("\t999 or 1000 {} retrieved exactly,"
@@ -177,6 +181,12 @@ class CMVSubAuthor:
     def get_more_history_for(self, post_prefix, post_type, post_generator):
         """
         """
+        if post_prefix == "com":
+            PostClass = Comment
+        else:
+            PostClass = Submission
+
+
         con_posts = post_generator.controversial(limit=None)
         hot_posts = post_generator.hot(limit=None)
         top_posts = post_generator.top(limit=None)
@@ -184,48 +194,37 @@ class CMVSubAuthor:
         new_posts_found, same_posts_found = 0, 0
         for post_types in zip(con_posts, hot_posts, top_posts):
             for post in post_types:
-                if post not in self.history[post_prefix + "_id"]:
+                gathered_posts = set(tup[0] for tup in self.db_session.query(PostClass.sqla_mapping.reddit_id).all())
+
+                if post.id not in gathered_posts:
                     new_posts_found += 1
-                    self.history[post_prefix + "_id"].append(post.id)
-                    self.history[post_prefix + "_inst"].append(post)
-                    if post_prefix == "com":
-                        self.history["com_newest"].append(False)
+                    PostClass(post, self.db_session).save_to_db()
                 else:
                     same_posts_found += 1
- 
+
         if new_posts_found == 3000:
             print("Maximum number (3000) of new {} found".format(post_type))
         else:
             print("\t{} new and {} same {} found".format(new_posts_found,
-                same_posts_found, post_type))
+                                                                         same_posts_found, post_type))
 
-    def get_post_df(self, post_type):
-        """
-        This function returns a series so this class can update the authors"
-        comments or submissions dataframe in CMVScraperModder.
-        """
-        attribution_dict = {post_type_key: value for post_type_key, value in
-                            self.history.items() if post_type[:3] ==
-                            post_type_key[:3]}
-        attribution_dict.update({"author": self.user_name})
-        return pd.DataFrame(attribution_dict)
 
 # TODO(jcm): Make CMVSubmission inherit from CMVAuthSubmission(?)
-class CMVAuthSubmission:
+class Submission:
     """
     """
+    sqla_mapping = SubmissionSchema
     STATS_TEMPLATE = {"created_utc": None,
                       "score": None,
                       "subreddit": None,
                       "content": None,
-                      "num_root_comments": 0,
-                      "num_user_comments": 0,
-                      "num_unique_users": 0,
+                      "direct_comments": 0,
+                      "total_comments": 0,
+                      "unique_participants": 0,
                       "has_deleted_user": False,
                       "title": None}
-
     @can_fail
-    def __init__(self, submission_inst):
+    def __init__(self, submission_inst, session):
         """
         """
         self.submission = submission_inst
@@ -233,21 +232,23 @@ class CMVAuthSubmission:
                       "score": None,
                       "subreddit": None,
                       "content": None,
-                      "num_root_comments": 0,
-                      "num_user_comments": 0,
+                      "direct_comments": 0,
+                      "total_comments": 0,
                       "has_deleted_user": False,
                       "title": None}
+        self.db_session = session
         self.unique_users = set()
 
         # Stats that can be gathered right off the bat
+        self.stats["reddit_id"] = self.submission.id
         self.stats["created_utc"] = self.submission.created_utc
         self.stats["score"] = self.submission.score
         self.stats["subreddit"] = self.submission.subreddit_name_prefixed
         self.stats["content"] = self.submission.selftext
         self.stats["title"] = self.submission.title
-        
-        # self.parse_root_comments(self.submission.comments)
-        # self.num_unique_users = len(self.unique_users)
+
+        self.parse_root_comments(self.submission.comments)
+        self.unique_participants = len(self.unique_users)
         self.parsed = True
 
     @can_fail
@@ -263,8 +264,8 @@ class CMVAuthSubmission:
             elif com.stickied:
                 continue # Sticked comments are not replies to view
             else:
-                self.stats["num_user_comments"] += 1
-                self.stats["num_root_comments"] += 1
+                self.stats["total_comments"] += 1
+                self.stats["direct_comments"] += 1
                 try:
                     com_author = com.author.name
                 except AttributeError: # If author is None, then user is deleted
@@ -280,7 +281,7 @@ class CMVAuthSubmission:
         reply_tree.replace_more(limit=None)
 
         for reply in reply_tree.list():
-            self.stats["num_user_comments"] += 1
+            self.stats["total_comments"] += 1
             try:
                 reply_author = reply.author.name
             except AttributeError: # If author is None, then user is deleted
@@ -288,54 +289,52 @@ class CMVAuthSubmission:
                 reply_author = "[deleted]"
             self.unique_users.add(reply_author)
 
-    def get_stats_series(self):
+    def save_to_db(self):
         """
         """
-        info_series = pd.Series(self.stats)
-        info_series.sort_index(inplace=True)
-        return info_series
+        sqla_obj = self.sqla_mapping(**self.stats)
+        self.db_session.add(sqla_obj)
+        self.db_session.commit()
 
 # STATS_TEMPLATE for date, score, subreddit. Could probably include a general
 # method to update that dictionary in self.stats as well. Would also reduce
 # redundancy in having 2 get_stats_series.
-class CMVAuthComment:
+class Comment:
     """
     """
-    STATS_TEMPLATE = {"created_utc": None,
-            "score": None,
-            "subreddit": None,
-            "content": None,
-            "edited": None,
-            "num_replies": 0,
-            "parent_submission": None,
-            "parent_comment": False} 
+    sqla_mapping = CommentSchema
+
     @can_fail
-    def __init__(self, comment_inst):
+    def __init__(self, comment_inst, session):
         """
         """
         self.comment = comment_inst
-        self.stats = {"created_utc": None,
+        self.stats = {"reddit_id": None,
+                      "created_utc": None,
                       "score": None,
                       "subreddit": None,
                       "content": None,
                       "edited": None, 
-                      "num_replies": 0,
-                      "parent_submission": None,
-                      "parent_comment": False}
+                      "replies": 0,
+                      "submission_id": None,
+                      "parent_id": False}
         self.unique_users = set()
+        self.db_session = session
 
         # Stats that can be gathered right away
+        self.stats["reddit_id"] = self.comment.id
         self.stats["created_utc"] = self.comment.created_utc
         self.stats["score"] = self.comment.score
         self.stats["subreddit"] = (self.comment.submission.
                                   subreddit_name_prefixed)
         self.stats["content"] = self.comment.body
         self.stats["edited"] = self.comment.edited
-        self.stats["parent_submission"] = self.comment.submission
-        self.stats["parent_comment"] = self.comment.parent()
+        self.stats["submission_id"] = self.comment.submission.id
+        self.stats["parent_id"] = self.comment.parent().id
+        self.stats["is_direct_reply"] = (self.stats["parent_id"] == self.stats["submission_id"])
 
         self.parse_replies(comment_inst.replies)
-        self.stats["num_unique_users"] = len(self.unique_users)
+        self.stats["unique_participants"] = len(self.unique_users)
         self.parsed = True
 
     @can_fail
@@ -345,7 +344,7 @@ class CMVAuthComment:
         reply_tree.replace_more(limit=None)
 
         for reply in reply_tree.list():
-            self.stats["num_user_comments"] += 1
+            self.stats["replies"] += 1
             try:
                 reply_author = reply.author.name
             except AttributeError: # If author is None, then user is deleted
@@ -353,10 +352,9 @@ class CMVAuthComment:
                 reply_author = "[deleted]"
             self.unique_users.add(reply_author)
 
-    def get_stats_series(self):
+    def save_to_db(self):
         """
         """
-        info_series = pd.Series(self.stats)
-        info_series.sort_index(inplace=True)
-        return info_series
-
+        sqla_obj = self.sqla_mapping(**self.stats)
+        self.db_session.add(sqla_obj)
+        self.db_session.commit()

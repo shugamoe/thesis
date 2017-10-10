@@ -10,7 +10,7 @@ import pandas as pd
 import praw
 import argparse
 from utils import can_fail
-from cmv_types import CMVSubmission, CMVSubAuthor, CMVAuthSubmission, CMVAuthComment
+from cmv_types import CMVSubmission, CMVSubAuthor, Submission, Comment
 from cmv_tables import init_tables
 
 # sqlalchemy imports
@@ -39,10 +39,11 @@ class CMVScraperModder:
         Initializes the class with an instance of the praw.Reddit class.
         """
         # sqlalchemy connection
-        self.engine = create_engine("sqlite:///" + db_loc, echo=True)
+        self.engine = create_engine("sqlite:///" + db_loc, echo=False)
         session = sessionmaker(bind=self.engine)
         self.session = session()
         if new_tables:
+            os.system(": > {}".format(db_loc))
             CMVScraperModder.init_tables(self.engine)
 
         # PRAW objects
@@ -66,6 +67,7 @@ class CMVScraperModder:
         self.eg_submission = self.praw_agent.submission("5kgxsz")
         self.eg_comment = self.praw_agent.comment("cr2jp5a")
         self.eg_user = self.praw_agent.redditor("RocketCity1234")
+        self.eg_nested_comment = self.praw_agent.comment("dlh13qx")
 
     @staticmethod
     def init_tables(engine):
@@ -131,82 +133,18 @@ class CMVScraperModder:
     def scrape_author_histories(self):
         """
         """
-        if hasattr(self, "cmv_subs"):
-            pass
-        else:
-            self.scrape_submissions()
-        
         get_auth_hist_vrized = np.vectorize(self._scrape_author_history,
                 otypes="?") # otypes kwarg to avoid double appplying func
-        get_auth_hist_vrized(self.cmv_subs["author"].unique())
-        
+        unique_auths = np.unique([tup[0] for tup in self.session.query(CMVSubmission.sqla_mapping.author).all()])
+        get_auth_hist_vrized(unique_auths)
+
     def _scrape_author_history(self, author):
         """
         """
         print("Retrieving history for: {}".format(author))
-        SubAuthor = CMVSubAuthor(self.praw_agent.redditor(author))
-        # SubAuthor.get_history_for("comments")
+        SubAuthor = CMVSubAuthor(self.praw_agent.redditor(author), self.session)
+        SubAuthor.get_history_for("comments")
         SubAuthor.get_history_for("submissions")
-        
-        # if hasattr(self, "cmv_author_coms"):
-        #    self.cmv_author_coms= self.cmv_author_coms.append_date(
-        #            SubAuthor.get_post_df("comments"))
-        # else:
-        #    self.cmv_author_coms = SubAuthor.get_post_df("comments")
-
-        if hasattr(self, "cmv_author_subs"):
-            self.cmv_author_subs = self.cmv_author_subs.append_date(
-                SubAuthor.get_post_df("submissions"))
-        else:
-            self.cmv_author_subs = SubAuthor.get_post_df("submissions")
-
-
-    def update_author_history(self):
-        """
-        """
-        if hasattr(self, "cmv_author_subs"):
-            pass
-        else:
-            self.scrape_author_histories()
-        # Update Submissions
-        sub_inst_series = self.cmv_author_subs[["sub_inst"]]
-
-        sub_inst_series = sub_inst_series.assign(
-            **{label: None for label in 
-                    list(CMVAuthSubmission.STATS_TEMPLATE.keys())})
-        sub_inst_series.loc[:, sorted(list(CMVAuthSubmission.STATS_TEMPLATE.keys()))] = (
-            sub_inst_series["sub_inst"].apply(
-                    lambda sub_inst: CMVAuthSubmission(sub_inst)
-                    .get_stats_series()))
-   
-        #sub_inst_series[sorted(list(CMVAuthSubmission.STATS_TEMPLATE.keys()))] = (
-                #sub_inst_series["sub_inst"].apply(
-                    #lambda sub_inst: CMVAuthSubmission(sub_inst)
-                    #.get_stats_series()))
-        self.cmv_author_subs = self.cmv_author_subs.merge(sub_inst_series,
-                                                          on="sub_inst", copy=False)
-        self.cmv_author_subs.drop_duplicates(subset="sub_id", inplace=True)
-        self.cmv_author_subs.dropna(axis=0, how="all", inplace=True)
-
-        # Update Comments
-        # com_inst_series = self.cmv_author_coms[["com_inst"]]
-        # print("Comment instances gathered")
-        # com_inst_series = com_inst_series.assign(
-                 # **{label: None for label in
-                     # list(CMVAuthComment.STATS_TEMPLATE.keys())})
-        # com_inst_series.loc[:, sorted(list(CMVAuthComment.STATS_TEMPLATE.keys()))] = (
-            # com_inst_series["com_inst"].apply(
-                # lambda com_inst: CMVAuthComment(com_inst).get_stats_series()
-            # ))
-        #com_inst_series[sorted(list(CMVAuthComment.STATS_TEMPLATE.keys()))] = (
-        #com_inst_series["com_inst"].apply(
-                #lambda com_inst: CMVAuthComment(com_inst).get_stats_series()
-            #))
-        # print("Comment stats extracted")
-        # self.cmv_author_coms = self.cmv_author_coms.merge(com_inst_series,
-                # on="com_inst", copy=False)
-        # self.cmv_author_coms.drop_duplicates(subset="com_id", inplace=True)
-        # print("Comment stats merged")
 
     @staticmethod
     def make_output_dir(dir_name):
@@ -231,6 +169,7 @@ def main():
     global smodder 
     smodder = CMVScraperModder(**vars(args))
     smodder.scrape_submissions()
+    smodder.scrape_author_histories()
 
 
 if __name__ == "__main__":

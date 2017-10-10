@@ -6,8 +6,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-Base = declarative_base()
-
+Base = declarative_base() 
 class RedditContentMixin(object):
     """
     Columns that ought to be common to any submission or comment on Reddit
@@ -15,10 +14,12 @@ class RedditContentMixin(object):
     # Pre Interaction Info
     reddit_id = Column(String, primary_key=True)
     author = Column(String)
-    date_utc = Column(Integer)
+    created_utc = Column(Integer)
     title = Column(String)
     content = Column(String)
     score = Column(Integer)
+    edited = Column(Boolean)
+    unique_participants = Column(Integer)
 
 class SubmissionMixin(RedditContentMixin):
     """
@@ -27,18 +28,27 @@ class SubmissionMixin(RedditContentMixin):
     direct_comments = Column(Integer)
     total_comments = Column(Integer)
     author_comments = Column(Integer)
-    unique_participants = Column(Integer)
     subreddit = Column(String)
+    has_deleted_user = Column(Boolean)
 
-class CMVSub(SubmissionMixin, Base):
+class CMVSubSchema(SubmissionMixin, Base):
     __tablename__ = "CMV_Submissions"
 
     # Post Interaction Info
     delta_from_author = Column(Boolean)
     num_deltas_from_author = Column(Integer)
 
-class AuthSub(SubmissionMixin, Base):
+class SubmissionSchema(SubmissionMixin, Base):
     __tablename__ = "CMV_Author_Submissions"
+
+
+class CommentSchema(RedditContentMixin, Base):
+    __tablename__ = "CMV_Author_Comments"
+    replies = Column(Integer)
+    is_direct_reply = Column(Boolean)
+    submission_id = Column(String)
+    parent_id = Column(String)
+    subreddit = Column(String)
 
 
 
@@ -52,7 +62,7 @@ def init_tables(engine):
     # Add example
 #    info_dict = {"reddit_id": "69",
 #                 "author": "beefman",
-#                 "date_utc": 1498256225,
+#                 "created_utc": 1498256225,
 #                 "title": "Beef > Pork?",
 #                 "content": "Beef da best. Fight me irl",
 #                 "delta_from_author": True,
