@@ -35,7 +35,7 @@ class CMVSubmission:
                       "direct_comments": 0,
                       "total_comments": 0,
                       "author_comments": 0,
-                      "num_deltas_from_author": 0}
+                      "deltas_from_author": 0}
 
         # Get author first
         try:
@@ -67,7 +67,7 @@ class CMVSubmission:
                 self.stats["total_comments"] += 1
                 self.stats["direct_comments"] += 1
                 if str(com.author) == self.stats["author"]:
-                    self.stats["num_OP_comments"] += 1
+                    self.stats["author_comments"] += 1
                 self.parse_replies(com.replies)
 
     @can_fail
@@ -88,9 +88,9 @@ class CMVSubmission:
             # Check for OP comments
             try:
                 if str(reply.author) == self.author:
-                    self.stats["num_OP_comments"] += 1
+                    self.stats["author_comments"] += 1
                 else:
-                    self.stats["num_user_comments"] += 1
+                    self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
                 pass
 
@@ -108,7 +108,7 @@ class CMVSubmission:
             if isinstance(parent_com, praw.models.Comment):
                 if parent_com.author.name == self.stats["author"]:
                     self.stats["delta_from_author"] = True
-                    self.stats["num_deltas_from_author"] += 1
+                    self.stats["deltas_from_author"] += 1
     
     def save_to_db(self):
         """
@@ -218,10 +218,9 @@ class CMVAuthSubmission:
                       "score": None,
                       "subreddit": None,
                       "content": None,
-                      "num_root_comments": 0,
-                      "num_user_comments": 0,
-                      "num_unique_users": 0,
-                      "has_deleted_user": False,
+                      "direct_comments": 0,
+                      "total_comments": 0,
+                      "unique_participants": 0,
                       "title": None}
 
     @can_fail
