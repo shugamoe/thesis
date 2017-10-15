@@ -10,7 +10,7 @@ import pandas as pd
 import praw
 import argparse
 from utils import can_fail
-from cmv_types import CMVSubmission, CMVSubAuthor, CMVAuthSubmission, CMVAuthComment
+from cmv_types import GatherSub, GatherCMVSub, GatherComment, GatherCMVComment, GatherCMVSubAuthor
 from cmv_tables import init_tables
 
 # sqlalchemy imports
@@ -30,23 +30,28 @@ END_BDAY_2016 = 1461130000
 
 
 
-class CMVScraperModder:
+
+
+class CMVScraper:
     """
     Class to scrape /r/changemyview for MACS 302 and possibly thesis.
     """
-    def __init__(self, start_date, end_date, new_tables, pwd_file):
+    def __init__(self, start_date, end_date, new_tables, pwd_file, 
+            cmv_com_content, all_com_content, echo):
         """
         Initializes the class with an instance of the praw.Reddit class.
         """
+        self.cmv_com_content = cmv_com_content
+        self.all_com_content = all_com_content
         with open(pwd_file, 'r') as f:
             password = f.read()[:-1]
 
         # sqlalchemy connection
-        self.engine = sqlalchemy.create_engine('mysql://jmcclellan:{}@mpcs53001.cs.uchicago.edu'.format(password), echo=True)
+        self.engine = sqlalchemy.create_engine('mysql://jmcclellan:{}@mpcs53001.cs.uchicago.edu/test?charset=utf8'.format(password), echo=echo)
         session = sessionmaker(bind=self.engine)
         self.session = session()
         if new_tables:
-            CMVScraperModder.init_tables(self.engine)
+            CMVScraper.init_tables(self.engine)
 
         # PRAW objects
         self.praw_agent = praw.Reddit("cmv_scrape", # Site ID
@@ -70,6 +75,11 @@ class CMVScraperModder:
         self.eg_comment = self.praw_agent.comment("cr2jp5a")
         self.eg_user = self.praw_agent.redditor("RocketCity1234")
 
+    def look_at_comment(self, com_id):
+        """
+        """
+        return self.praw_agent.comment(com_id)
+
     @staticmethod
     def init_tables(engine):
         """
@@ -91,6 +101,12 @@ class CMVScraperModder:
                             help="Creates new tables in the database")
         parser.add_argument("--pwd_file", type=str, default="pwd.txt",
                             help="File containing the password")
+        parser.add_argument("--cmv_com_content", type=bool, default=True,
+                            help="Gather the content of CMV Comments")
+        parser.add_argument("--all_com_content", type=bool, default=False,
+                            help="Gather the content of All Comments")
+        parser.add_argument("--echo", action="store_true", default=False,
+                            help="Echo sqlalchemy engine")
 
         parser_args = parser.parse_args()
 
@@ -102,6 +118,19 @@ class CMVScraperModder:
         This function gathers the submission IDs for submissions in
         /r/changemyview
         """
+        @can_fail
+        def scrape_submissions_between(self, date_start_date, date_end_date):
+            """
+            """
+            date_start_date_string = (
+                time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(date_start_date)))
+            date_end_date_string = (
+                time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(date_end_date)))
+            print("Gathering {} to {}".format(date_start_date_string, date_end_date_string))
+
+            for sub_instance in self.subreddit.submissions(date_start_date, date_end_date):
+                GatherCMVSub(sub_instance, self).save_to_db()
+
         if hasattr(self, "date_chunks"):
             print("Time window too large, gathering submissions in chunks")
             second_last_index = len(self.date_chunks) - 2
@@ -112,56 +141,28 @@ class CMVScraperModder:
                 else:
                     date_start_date = self.date_chunks[i] + 1
                     date_end_date = self.date_chunks[i + 1]
-                self._scrape_submissions_between(date_start_date, date_end_date)
+                scrape_submissions_between(self, date_start_date, date_end_date)
             # num_subs_gathered = len(self.cmv_subs)
             # print("{} submissions gathered".format(num_subs_gathered))
         else:
-            self._scrape_submissions_between(self.date_start_date, self.date_end_date)
+            scrape_submissions_between(self, self.date_start_date, self.date_end_date)
 
-    @can_fail
-    def _scrape_submissions_between(self, date_start_date, date_end_date):
-        """
-        """
-        date_start_date_string = (
-            time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(date_start_date)))
-        date_end_date_string = (
-            time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(date_end_date)))
-        print("Gathering {} to {}".format(date_start_date_string, date_end_date_string))
-
-        for sub_instance in self.subreddit.submissions(date_start_date, date_end_date):
-            CMVSubmission(sub_instance, self.session).save_to_db()
 
     def scrape_author_histories(self):
         """
         """
-        if hasattr(self, "cmv_subs"):
-            pass
-        else:
-            self.scrape_submissions()
         
-        get_auth_hist_vrized = np.vectorize(self._scrape_author_history,
-                otypes="?") # otypes kwarg to avoid double appplying func
-        get_auth_hist_vrized(self.cmv_subs["author"].unique())
-        
-    def _scrape_author_history(self, author):
-        """
-        """
-        print("Retrieving history for: {}".format(author))
-        SubAuthor = CMVSubAuthor(self.praw_agent.redditor(author))
-        # SubAuthor.get_history_for("comments")
-        SubAuthor.get_history_for("submissions")
-        
-        # if hasattr(self, "cmv_author_coms"):
-        #    self.cmv_author_coms= self.cmv_author_coms.append_date(
-        #            SubAuthor.get_post_df("comments"))
-        # else:
-        #    self.cmv_author_coms = SubAuthor.get_post_df("comments")
+        def scrape_author_history(author):
+            """
+            """
+            print("Retrieving history for: {}".format(author))
+            SubAuthor = GatherCMVSubAuthor(author, self)
+            # SubAuthor.get_history_for("comments")
+            SubAuthor.get_history_for("submissions")
 
-        if hasattr(self, "cmv_author_subs"):
-            self.cmv_author_subs = self.cmv_author_subs.append_date(
-                SubAuthor.get_post_df("submissions"))
-        else:
-            self.cmv_author_subs = SubAuthor.get_post_df("submissions")
+        get_auth_hist_vrized = np.vectorize(scrape_author_history,
+                otypes="?") # otypes kwarg to avoid double appplying func
+        get_auth_hist_vrized(np.array([cmv_sub.author for cmv_sub in self.session.query(GatherCMVSub.sqla_mapping)]))
 
 
     def update_author_history(self):
@@ -229,11 +230,12 @@ class CMVScraperModder:
 def main():
     """
     """
-    args = CMVScraperModder.arg_parser()
+    args = CMVScraper.arg_parser()
     print(args)
     global smodder 
-    smodder = CMVScraperModder(**vars(args))
+    smodder = CMVScraper(**vars(args))
     smodder.scrape_submissions()
+    smodder.scrape_author_histories()
 
 
 if __name__ == "__main__":
