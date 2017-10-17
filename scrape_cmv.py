@@ -22,6 +22,8 @@ END_2016 = 1483228800
 START_2013 = 1356998400
 START_2015 = 1420070400
 START_2016 = 1451606400
+JAN_20_2016 = 1453334399 
+JAN_4_2016 = 1451811999
 MID_2016 = 1464739200
 
 START_BDAY_2016 = 1461110400
@@ -47,7 +49,7 @@ class CMVScraper:
             password = f.read()[:-1]
 
         # sqlalchemy connection
-        self.engine = sqlalchemy.create_engine('mysql://jmcclellan:{}@mpcs53001.cs.uchicago.edu/test?charset=utf8'.format(password), echo=echo)
+        self.engine = sqlalchemy.create_engine('mysql://jmcclellan:{}@mpcs53001.cs.uchicago.edu/jmcclellanDB?charset=utf8'.format(password), echo=echo)
         session = sessionmaker(bind=self.engine)
         self.session = session()
         if new_tables:
@@ -80,6 +82,11 @@ class CMVScraper:
         """
         return self.praw_agent.comment(com_id)
 
+    def look_at_submission(self, sub_id):
+        """
+        """
+        return self.praw_agent.submission(sub_id)
+
     @staticmethod
     def init_tables(engine):
         """
@@ -93,11 +100,11 @@ class CMVScraper:
         Handles arguments for CLI
         """
         parser = argparse.ArgumentParser(description="Scrape CMV Submissions and author information")
-        parser.add_argument("--start_date", "-s", default=START_BDAY_2016, type=int,
+        parser.add_argument("--start_date", "-s", default=START_2016, type=int,
                             help="Start Date (UTC Epoch) of CMV Submissions to gather")
-        parser.add_argument("--end_date", "-e", default=END_BDAY_2016, type=int,
+        parser.add_argument("--end_date", "-e", default=JAN_4_2016, type=int,
                             help="End Date (UTC Epoch) of CMV Submissions to gather")
-        parser.add_argument("--new_tables", action="store_false", # Stores True as default lol
+        parser.add_argument("--new_tables", action="store_true", default=False,
                             help="Creates new tables in the database")
         parser.add_argument("--pwd_file", type=str, default="pwd.txt",
                             help="File containing the password")
@@ -133,7 +140,7 @@ class CMVScraper:
 
         if hasattr(self, "date_chunks"):
             print("Time window too large, gathering submissions in chunks")
-            second_last_index = len(self.date_chunks) - 2
+            second_last_index = len(self.date_chunks) - 1
             for i in range(second_last_index):
                 if i == 0:
                     date_start_date = self.date_chunks[i]
@@ -157,60 +164,14 @@ class CMVScraper:
             """
             print("Retrieving history for: {}".format(author))
             SubAuthor = GatherCMVSubAuthor(author, self)
-            # SubAuthor.get_history_for("comments")
+            SubAuthor.get_history_for("comments")
             SubAuthor.get_history_for("submissions")
+            SubAuthor.save_to_db()
 
         get_auth_hist_vrized = np.vectorize(scrape_author_history,
                 otypes="?") # otypes kwarg to avoid double appplying func
         get_auth_hist_vrized(np.array([cmv_sub.author for cmv_sub in self.session.query(GatherCMVSub.sqla_mapping)]))
 
-
-    def update_author_history(self):
-        """
-        """
-        if hasattr(self, "cmv_author_subs"):
-            pass
-        else:
-            self.scrape_author_histories()
-        # Update Submissions
-        sub_inst_series = self.cmv_author_subs[["sub_inst"]]
-
-        sub_inst_series = sub_inst_series.assign(
-            **{label: None for label in 
-                    list(CMVAuthSubmission.STATS_TEMPLATE.keys())})
-        sub_inst_series.loc[:, sorted(list(CMVAuthSubmission.STATS_TEMPLATE.keys()))] = (
-            sub_inst_series["sub_inst"].apply(
-                    lambda sub_inst: CMVAuthSubmission(sub_inst)
-                    .get_stats_series()))
-   
-        #sub_inst_series[sorted(list(CMVAuthSubmission.STATS_TEMPLATE.keys()))] = (
-                #sub_inst_series["sub_inst"].apply(
-                    #lambda sub_inst: CMVAuthSubmission(sub_inst)
-                    #.get_stats_series()))
-        self.cmv_author_subs = self.cmv_author_subs.merge(sub_inst_series,
-                                                          on="sub_inst", copy=False)
-        self.cmv_author_subs.drop_duplicates(subset="sub_id", inplace=True)
-        self.cmv_author_subs.dropna(axis=0, how="all", inplace=True)
-
-        # Update Comments
-        # com_inst_series = self.cmv_author_coms[["com_inst"]]
-        # print("Comment instances gathered")
-        # com_inst_series = com_inst_series.assign(
-                 # **{label: None for label in
-                     # list(CMVAuthComment.STATS_TEMPLATE.keys())})
-        # com_inst_series.loc[:, sorted(list(CMVAuthComment.STATS_TEMPLATE.keys()))] = (
-            # com_inst_series["com_inst"].apply(
-                # lambda com_inst: CMVAuthComment(com_inst).get_stats_series()
-            # ))
-        #com_inst_series[sorted(list(CMVAuthComment.STATS_TEMPLATE.keys()))] = (
-        #com_inst_series["com_inst"].apply(
-                #lambda com_inst: CMVAuthComment(com_inst).get_stats_series()
-            #))
-        # print("Comment stats extracted")
-        # self.cmv_author_coms = self.cmv_author_coms.merge(com_inst_series,
-                # on="com_inst", copy=False)
-        # self.cmv_author_coms.drop_duplicates(subset="com_id", inplace=True)
-        # print("Comment stats merged")
 
     @staticmethod
     def make_output_dir(dir_name):

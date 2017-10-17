@@ -37,11 +37,14 @@ def can_fail(praw_call, *args, **kwargs):
                     pass
                 call_successful = True
             except AttributeError as e:
+                # pdb.set_trace()
+                print("AttributeError")
                 print("\n\t{}".format(str(e)))
                 print("\tTrying: {}".format(praw_call.__name__))
                 call_successful = True
                 # pdb.set_trace()
             except RuntimeError as e:
+                print("RuntimeError")
                 print("\n\t{}".format(str(e)))
                 print("\tTrying: {}".format(praw_call.__name__))
                 call_successful = True
