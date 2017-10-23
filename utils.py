@@ -8,6 +8,7 @@ from datetime import datetime
 import pickle
 import pdb
 from prawcore.exceptions import Forbidden, NotFound
+from sqlalchemy.exc import OperationalError
 
 
 def can_fail(praw_call, *args, **kwargs):
@@ -49,6 +50,8 @@ def can_fail(praw_call, *args, **kwargs):
                 print("\tTrying: {}".format(praw_call.__name__))
                 call_successful = True
                 # pdb.set_trace()
+            except OperationalError as e:
+                pdb.set_trace()
         if "praw_call_result" not in locals():
             praw_call_result = None
 

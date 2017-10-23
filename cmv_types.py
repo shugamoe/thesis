@@ -98,7 +98,7 @@ class GatherSub:
             except AttributeError: # If author is None, then user is deleted
                 pass
 
-    
+    @can_fail 
     def save_to_db(self):
         """
         Writes the stats of the object to the SQL datebase
@@ -257,6 +257,7 @@ class GatherCMVSub:
                         # Count it as a delta from other
                     self.stats["deltas_from_other"] += 1
 
+    @can_fail
     def save_to_db(self):
         """
         Writes the stats of the object to the SQL datebase
@@ -361,6 +362,7 @@ class GatherCMVModComment:
                 pass
 
 
+    @can_fail
     def save_to_db(self):
         """
         Writes the stats of the object to the SQL datebase
@@ -464,6 +466,7 @@ class GatherComment:
             except AttributeError: # If author is None, then user is deleted
                 pass
 
+    @can_fail
     def save_to_db(self):
         """
         Writes the stats of the object to the SQL datebase
@@ -606,6 +609,7 @@ class GatherCMVComment:
                     self.stats["deltas_from_other"] += 1
 
 
+    @can_fail
     def save_to_db(self):
         """
         Writes the stats of the object to the SQL datebase
@@ -754,6 +758,7 @@ class GatherCMVSubAuthor:
             print("\t{} new and {} same {} found".format(new_posts_found,
                 same_posts_found, post_type))
 
+    @can_fail
     def save_to_db(self):
         """
         Writes the stats of the object to the SQL datebase
