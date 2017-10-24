@@ -624,7 +624,6 @@ class GatherCMVComment:
                 self.db_session.commit()
             except OperationalError:
                 self.db_session.rollback()
-                self.stats["title"] = self.stats["title"].encode("unicode_escape")
                 self.stats["content"] = self.stats["content"].encode("unicode_escape")
                 sqla_obj = self.sqla_mapping(**self.stats)
                 self.db_session.add(sqla_obj)
