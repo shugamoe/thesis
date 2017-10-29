@@ -19,7 +19,7 @@ class RedditContentMixin:
     date_utc = Column(Integer, nullable=False)
     reddit_id = Column(String(7, convert_unicode=True), primary_key=True)
     author = Column(String(20, convert_unicode=True), nullable=False)
-    subreddit = Column(String(23, convert_unicode=True), nullable=False)
+    subreddit = Column(String(26, convert_unicode=True), nullable=False)
     edited = Column(Boolean, nullable=False)
 
 class SubmissionMixin(RedditContentMixin):
