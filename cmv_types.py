@@ -332,8 +332,8 @@ class GatherCMVModComment:
         self.stats["content"] = self.comment.body
         self.stats["date_utc"] = self.comment.created_utc
         self.stats["reddit_id"] = self.comment.id
-        self.stats["subreddit"] = (self.comment.submission.
-                                  subreddit_name_prefixed)
+        self.stats["subreddit"] = "r/" + str(self.comment.submission.
+                                  subreddit)
         self.stats["edited"] = self.comment.edited
         self.stats["parent_submission_id"] = self.comment.submission
         self.stats["parent_comment_id"] = (self.comment.parent().id if 
