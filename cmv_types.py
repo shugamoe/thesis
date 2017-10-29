@@ -180,6 +180,7 @@ class GatherCMVSub:
         """
         """
         for com in comment_tree:
+            com_parsed = False
             if isinstance(com, praw.models.MoreComments):
                 self.parse_root_comments(com.comments())
             elif com.stickied:
@@ -198,6 +199,7 @@ class GatherCMVSub:
                             # Confirm moderator was made moderator at current time
                             self.stats["cmv_mod_comments"] += 1
                             GatherCMVModComment(com, self.scraper).save_to_db()
+                            com_parsed = True
                             if com_author == "DeltaBot":
                                 self.parse_delta_bot_comment(com)
 
@@ -206,7 +208,7 @@ class GatherCMVSub:
                     pass
                 self.parse_replies(com.replies)
 
-                if self.scraper.cmv_com_content:
+                if self.scraper.cmv_com_content and not com_parsed:
                     GatherCMVComment(com, self.scraper).save_to_db()
 
     @can_fail
@@ -216,10 +218,10 @@ class GatherCMVSub:
         reply_tree.replace_more(limit=None)
 
         for reply in reply_tree.list():
+            reply_parsed = False
             try:
                 if str(reply.author) == "DeltaBot":
                     self.parse_delta_bot_comment(reply)
-                    # GatherCMVModComment(reply, self.scraper).save_to_db()
                 else:
                     self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
