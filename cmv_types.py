@@ -49,7 +49,10 @@ class GatherSub:
         self.stats["content"] = self.submission.selftext
         self.stats["date_utc"] = self.submission.created_utc
         self.stats["reddit_id"] = self.submission.id
-        self.stats["subreddit"] = self.submission.subreddit_name_prefixed
+        try:
+            self.stats["subreddit"] = self.submission.subreddit_name_prefixed
+        except AttributeError:
+            self.stats["subreddit"] = "promoted"
         self.stats["edited"] = self.submission.edited
         self.stats["title"] = self.submission.title
 
@@ -437,8 +440,11 @@ class GatherComment:
         self.stats["content"] = self.comment.body
         self.stats["date_utc"] = self.comment.created_utc
         self.stats["reddit_id"] = self.comment.id
-        self.stats["subreddit"] = (self.comment.submission.
-                                  subreddit_name_prefixed)
+        try:
+            self.stats["subreddit"] = (self.comment.submission.
+                                      subreddit_name_prefixed)
+        except AttributeError:
+            self.stats["subreddit"] = "promoted"
         self.stats["edited"] = self.comment.edited
         self.stats["parent_submission_id"] = self.comment.submission.id
         self.stats["parent_comment_id"] = (self.comment.parent().id if 
@@ -546,8 +552,11 @@ class GatherCMVComment:
         self.stats["content"] = self.comment.body
         self.stats["date_utc"] = self.comment.created_utc
         self.stats["reddit_id"] = self.comment.id
-        self.stats["subreddit"] = (self.comment.submission.
-                                  subreddit_name_prefixed)
+        try:
+            self.stats["subreddit"] = (self.comment.submission.
+                                      subreddit_name_prefixed)
+        except AttributeError:
+            self.stats["subreddit"] = "promoted"
         self.stats["edited"] = self.comment.edited
         self.stats["parent_submission_id"] = self.comment.submission.id
         self.stats["parent_comment_id"] = (self.comment.parent().id if 
