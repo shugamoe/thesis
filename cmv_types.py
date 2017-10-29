@@ -229,6 +229,12 @@ class GatherCMVSub:
             try:
                 if str(reply.author) == self.author:
                     self.stats["author_comments"] += 1
+                elif reply.author in MOD_KEY.keys():
+                    # Could be mod comment
+                    if MOD_KEY[reply.author] < reply.created_utc:
+                        # Confirm moderator was made moderator at current time
+                        self.stats["cmv_mod_comments"] += 1
+                        GatherCMVModComment(reply, self.scraper).save_to_db()
                 else:
                     self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
