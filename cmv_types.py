@@ -5,6 +5,7 @@ File that holds objects that handle the scraping of the related CMV data types o
 
 import pdb
 import praw
+import numpy as np
 from sqlalchemy.exc import OperationalError, IntegrityError
 from utils import can_fail, MOD_KEY
 from cmv_tables import SQLASub, SQLACMVSub, SQLAComment, SQLACMVComment, SQLACMVSubAuthor, SQLACMVModComment
@@ -735,6 +736,10 @@ class GatherCMVSubAuthor:
         else:
             print("\t\t{} {} retrieved for {}".format(posts_retrieved,
                                                     post_type, self.stats["user_name"]))
+
+        # Calculate deltas_awarded in all CMV Submissions
+        self.stats["deltas_awarded"] = np.sum([cmv_sub.deltas_from_author for cmv_sub in 
+                            self.db_session.query(SQLACMVSub)])
 
     @can_fail
     def get_more_history_for(self, post_prefix, post_type, post_generator):
