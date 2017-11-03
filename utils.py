@@ -7,7 +7,7 @@ import calendar, time
 from datetime import datetime
 import pickle
 import pdb
-from prawcore.exceptions import Forbidden, NotFound
+from prawcore.exceptions import Forbidden, NotFound, RequestException
 from sqlalchemy.exc import OperationalError
 
 
@@ -50,6 +50,14 @@ def can_fail(praw_call, *args, **kwargs):
                 print("\tTrying: {}".format(praw_call.__name__))
                 call_successful = True
                 # pdb.set_trace()
+            except RequestException:
+                while not call_successful:
+                    time.sleep(sleep_time)
+                    try:
+                        praw_call_result = praw_call(self, *args, **kwargs)
+                        call_successful = True
+                    except RequestException:
+                        sleep_time += 60 # Wait another minute longer
             except OperationalError as e:
                 pdb.set_trace()
         if "praw_call_result" not in locals():
