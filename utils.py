@@ -58,7 +58,8 @@ def can_fail(praw_call, *args, **kwargs):
                         call_successful = True
                     except RequestException:
                         sleep_time += 60 # Wait another minute longer
-            except OperationalError as e:
+            except OperationalError as op_error:
+                print("Operational Error, inspect object 'op_error'")
                 pdb.set_trace()
         if "praw_call_result" not in locals():
             praw_call_result = None

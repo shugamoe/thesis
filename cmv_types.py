@@ -294,6 +294,7 @@ class GatherCMVSub:
         except IntegrityError:
             self.db_session.rollback()
             pass
+        return self.stats["deltas_from_author"]
 
 
 class GatherCMVModComment:
@@ -676,10 +677,14 @@ class GatherCMVSubAuthor:
 
         # Important variables to track
         self.stats = {"user_name": redditor_name,
-                      "submissions": 0,
-                      "comments": 0,
-                      "cmv_comments": 0,
-                      "cmv_submissions": 1,
+                      "comments": len([cmv_com.reddit_id for cmv_com in 
+                            self.db_session.query(SQLACMVComment)]),
+                      "submissions": len([cmv_sub.reddit_id for cmv_sub in 
+                            self.db_session.query(SQLACMVSub)]),
+                      "cmv_comments": len([cmv_com.reddit_id for cmv_com in 
+                            self.db_session.query(SQLACMVComment)]),
+                      "cmv_submissions": len([cmv_sub.reddit_id for cmv_sub in 
+                            self.db_session.query(SQLACMVSub)]),
                       "deltas_awarded": 0
                 }
 
