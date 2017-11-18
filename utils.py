@@ -8,7 +8,7 @@ from datetime import datetime
 import pickle
 import pdb
 from prawcore.exceptions import Forbidden, NotFound, RequestException
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, InvalidRequestError
 
 
 def can_fail(praw_call, *args, **kwargs):
@@ -61,6 +61,9 @@ def can_fail(praw_call, *args, **kwargs):
             except OperationalError as op_error:
                 print("Operational Error, inspect object 'op_error'")
                 pdb.set_trace()
+            except InvalidRequestError:
+                self.db_session.rollback()
+
         if "praw_call_result" not in locals():
             praw_call_result = None
 
