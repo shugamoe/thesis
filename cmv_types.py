@@ -246,7 +246,7 @@ class GatherCMVSub:
                     self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
                 pass
-            if not reply_parsed:
+            if not self.scraper.cmv_com_content and reply_parsed:
                 GatherCMVComment(reply, self.scraper)
 
 
@@ -579,14 +579,12 @@ class GatherCMVComment:
         reply_tree.replace_more(limit=None)
 
         for reply in reply_tree.list():
-            reply_parsed = False
             try:
                 if str(reply.author) == "DeltaBot":
                     self.parse_delta_bot_comment(reply)
 
                     # Adds comment to DB
                     GatherCMVModComment(reply, self.scraper).save_to_db()
-                    reply_parsed = True
                 else:
                     self.stats["total_children"] += 1
                 self.unique_repliers.add(reply.author)
@@ -607,8 +605,6 @@ class GatherCMVComment:
             except AttributeError: # If author is None, then user is deleted
                 pass
             # Make sure to gather the reply as a comment!
-            if not reply_parsed:
-                GatherCMVComment(reply, self.scraper).save_to_db()
 
     @can_fail
     def parse_delta_bot_comment(self, comment):
