@@ -241,10 +241,13 @@ class GatherCMVSub:
                         # Confirm moderator was made moderator at current time
                         self.stats["cmv_mod_comments"] += 1
                         GatherCMVModComment(reply, self.scraper).save_to_db()
+                        reply_parsed = True
                 else:
                     self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
                 pass
+            if not reply_parsed:
+                GatherCMVComment(reply, self.craper)
 
 
     @can_fail
@@ -481,6 +484,7 @@ class GatherComment:
                     self.stats["total_children"] += 1
             except AttributeError: # If author is None, then user is deleted
                 pass
+            GatherComment(reply, self.scraper)
 
     @can_fail
     def save_to_db(self):
@@ -575,17 +579,19 @@ class GatherCMVComment:
         reply_tree.replace_more(limit=None)
 
         for reply in reply_tree.list():
+            reply_parsed = False
             try:
                 if str(reply.author) == "DeltaBot":
                     self.parse_delta_bot_comment(reply)
 
                     # Adds comment to DB
                     GatherCMVModComment(reply, self.scraper).save_to_db()
+                    reply_parsed = True
                 else:
                     self.stats["total_children"] += 1
                 self.unique_repliers.add(reply.author)
             except AttributeError: # If author is None, then user is deleted
-                self.stats["total_replies"] += 1
+                self.stats["total_children"] += 1
 
             # Test whether the reply is a direct reply to the current comment
             if isinstance(reply.parent(), praw.models.reddit.comment.Comment):
@@ -600,6 +606,9 @@ class GatherCMVComment:
                     self.stats["total_children"] += 1
             except AttributeError: # If author is None, then user is deleted
                 pass
+            # Make sure to gather the reply as a comment!
+            if not reply_parsed:
+                GatherCMVComment(reply, self.scraper).save_to_db()
 
     @can_fail
     def parse_delta_bot_comment(self, comment):
