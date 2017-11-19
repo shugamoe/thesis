@@ -246,7 +246,7 @@ class GatherCMVSub:
                     self.stats["total_comments"] += 1
             except AttributeError: # If author is None, then user is deleted
                 pass
-            if not self.scraper.cmv_com_content and reply_parsed:
+            if not self.scraper.cmv_com_content and not reply_parsed:
                 GatherCMVComment(reply, self.scraper)
 
 
