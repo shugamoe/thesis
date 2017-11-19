@@ -247,7 +247,7 @@ class GatherCMVSub:
             except AttributeError: # If author is None, then user is deleted
                 pass
             if not reply_parsed:
-                GatherCMVComment(reply, self.craper)
+                GatherCMVComment(reply, self.scraper)
 
 
     @can_fail
