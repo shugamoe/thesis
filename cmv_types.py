@@ -625,6 +625,7 @@ class GatherCMVComment:
             #        (parent_com.parent().id == self.stats["reddit_id"])):
             try:
                 if parent_com.author.name == self.OP:
+                    print("\t\t\t\tDelta from OP recorded!")
                     self.stats["deltas_from_OP"] += 1
                 else:
                     self.stats["deltas_from_other"] += 1
@@ -712,7 +713,7 @@ class GatherCMVSubAuthor:
         post_prefix = post_type[:3]
         print("\tRetrieving {} for {}".format(post_type, self.stats["user_name"]))
 
-        com_limit = -1 
+        com_limit = 3
         for post in posts:
             # Check if we already gathered the cmv_comment or submission
             if post.id not in self.history["{}_id".format(post_prefix)]:
