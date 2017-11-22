@@ -621,16 +621,16 @@ class GatherCMVComment:
             # Also confirm that the comment deltabot responded to is in turn
             # responding to the comment the current instance of the class is
             # gathering stats for
-            if ((isinstance(parent_com, praw.models.Comment)) and
-                    (parent_com.parent().id == self.stats["reddit_id"])):
-                try:
-                    if parent_com.author.name == self.OP:
-                        self.stats["deltas_from_OP"] += 1
-                    else:
-                        self.stats["deltas_from_other"] += 1
-                except AttributeError: # Person awarding delta deleted their comment,
-                        # Count it as a delta from other
+            # if ((isinstance(parent_com, praw.models.Comment)) and
+            #        (parent_com.parent().id == self.stats["reddit_id"])):
+            try:
+                if parent_com.author.name == self.OP:
+                    self.stats["deltas_from_OP"] += 1
+                else:
                     self.stats["deltas_from_other"] += 1
+            except AttributeError: # Person awarding delta deleted their comment,
+                    # Count it as a delta from other
+                self.stats["deltas_from_other"] += 1
 
 
     @can_fail
