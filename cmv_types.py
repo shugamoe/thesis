@@ -8,7 +8,7 @@ import praw
 import numpy as np
 from sqlalchemy.exc import OperationalError, IntegrityError
 from utils import can_fail, MOD_KEY
-from cmv_tables import SQLASub, SQLACMVSub, SQLAComment, SQLACMVComment, SQLACMVSubAuthor, SQLACMVModComment
+from cmv_tables import SQLASub, SQLACMVSub, SQLAComment, SQLACMVComment, SQLACMVSubAuthor, SQLACMVModComment, SQLACMVCommentStream
 
 
 
@@ -683,16 +683,23 @@ class GatherCMVSubAuthor:
 
         # Important variables to track
         self.stats = {"user_name": redditor_name,
-                      "comments": len([cmv_com.reddit_id for cmv_com in 
-                            self.db_session.query(SQLACMVComment)]),
-                      "submissions": len([cmv_sub.reddit_id for cmv_sub in 
-                            self.db_session.query(SQLACMVSub)]),
                       "cmv_comments": len([cmv_com.reddit_id for cmv_com in 
-                            self.db_session.query(SQLACMVComment)]),
+                            self.db_session.query(SQLACMVComment).filter(
+                                SQLACMVComment.author == redditor_name)]),
                       "cmv_submissions": len([cmv_sub.reddit_id for cmv_sub in 
-                            self.db_session.query(SQLACMVSub)]),
+                            self.db_session.query(SQLACMVSub).filter(
+                                SQLACMVSub.author == redditor_name)]),
                       "deltas_awarded": 0
                 }
+
+
+        # (We don't gather anything buy cmv_comments and submissions at first)
+        self.stats["comments"] =  self.stats["cmv_comments"] # self.stats["cmv_comments"] +\
+                # len([com.reddit_id for com in self.db_session.query(SQLAComment).filter(
+                #    SQLACMVComment.author == redditor_name)])
+        self.stats["submissions"] = self.stats["cmv_submissions"] # self.stats["cmv_comments"] +\
+                # len([sub for sub in self.db_session.query(SQLASub).filter(
+                #    SQLACMVSub.author == redditor_name)])
 
         self.history = {"com_id": set([cmv_com.reddit_id for cmv_com in 
                             self.db_session.query(SQLACMVComment)]),

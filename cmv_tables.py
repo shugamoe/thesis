@@ -21,6 +21,7 @@ class RedditContentMixin:
     author = Column(String(20, convert_unicode=True), nullable=False)
     subreddit = Column(String(26, convert_unicode=True), nullable=False)
     edited = Column(Boolean, nullable=False)
+    stream_use = Column(Boolean, default=False)
 
 class SubmissionMixin(RedditContentMixin):
     """
