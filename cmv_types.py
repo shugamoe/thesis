@@ -8,7 +8,7 @@ import praw
 import numpy as np
 from sqlalchemy.exc import OperationalError, IntegrityError
 from utils import can_fail, MOD_KEY
-from cmv_tables import SQLASub, SQLACMVSub, SQLAComment, SQLACMVComment, SQLACMVSubAuthor, SQLACMVModComment, SQLACMVCommentStream
+from cmv_tables import SQLASub, SQLACMVSub, SQLAComment, SQLACMVComment, SQLACMVSubAuthor, SQLACMVModComment
 
 
 
