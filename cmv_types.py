@@ -720,7 +720,7 @@ class GatherCMVSubAuthor:
         post_prefix = post_type[:3]
         print("\tRetrieving {} for {}".format(post_type, self.stats["user_name"]))
 
-        com_limit = 3
+        com_limit = float('inf')
         for post in posts:
             # Check if we already gathered the cmv_comment or submission
             if post.id not in self.history["{}_id".format(post_prefix)]:
