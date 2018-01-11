@@ -164,7 +164,7 @@ class CMVScraper:
             """
             print("Retrieving history for: {}".format(author))
             SubAuthor = GatherCMVSubAuthor(author, self)
-            SubAuthor.get_history_for("comments")
+            # SubAuthor.get_history_for("comments")
             SubAuthor.get_history_for("submissions")
             SubAuthor.save_to_db()
 
