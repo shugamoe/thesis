@@ -59,8 +59,13 @@ def can_fail(praw_call, *args, **kwargs):
                     except RequestException:
                         sleep_time += 60 # Wait another minute longer
             except OperationalError as op_error:
-                print("Operational Error, inspect object 'op_error'")
-                pdb.set_trace()
+                while not call_successful:
+                    time.sleep(sleep_time)
+                    try:
+                        praw_call_result = praw_call(self, *args, **kwargs)
+                        call_successful = True
+                    except RequestException:
+                        sleep_time += 60 # Wait another minute longer
             except InvalidRequestError:
                 self.db_session.rollback()
 
