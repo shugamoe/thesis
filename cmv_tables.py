@@ -27,7 +27,7 @@ class SubmissionMixin(RedditContentMixin):
     """
     Columns that ought to be common to any submission on Reddit
     """
-    title = Column(String(500, convert_unicode=True), nullable=False)
+    title = Column(String(750, convert_unicode=True), nullable=False)
     content = Column(UnicodeText(40000), nullable=False)
     direct_comments = Column(Integer, nullable=False)
     total_comments = Column(Integer, nullable=False)
