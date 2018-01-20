@@ -68,6 +68,8 @@ def can_fail(praw_call, *args, **kwargs):
                         sleep_time += 60 # Wait another minute longer
             except InvalidRequestError:
                 self.db_session.rollback()
+            except AssertionError:
+                call_successful = True
 
         if "praw_call_result" not in locals():
             praw_call_result = None
