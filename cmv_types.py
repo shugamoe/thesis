@@ -95,7 +95,7 @@ class GatherSub:
 
             # Check for OP comments
             try:
-                if str(reply.author) == self.author:
+                if str(reply.author) == self.stats["author"]:
                     self.stats["author_comments"] += 1
                 else:
                     self.stats["total_comments"] += 1
@@ -233,7 +233,7 @@ class GatherCMVSub:
 
             # Check for OP comments
             try:
-                if str(reply.author) == self.author:
+                if str(reply.author) == self.stats["author"]:
                     self.stats["author_comments"] += 1
                 elif reply.author in MOD_KEY.keys():
                     # Could be mod comment
@@ -370,7 +370,7 @@ class GatherCMVModComment:
 
             # Check for OP comments
             try:
-                if str(reply.author) == self.author:
+                if str(reply.author) == self.stats["author"]:
                     self.stats["author_children"] += 1
                 else:
                     self.stats["total_children"] += 1
@@ -522,7 +522,7 @@ class GatherCMVComment:
         """
         """
         try:
-            self.OP = comment_inst.submission().author
+            self.OP = comment_inst.submission.author.name
         except:
             self.OP = "[deleted]"
         self.scraper = scraper
@@ -598,7 +598,7 @@ class GatherCMVComment:
 
             # Check for OP comments
             try:
-                if str(reply.author) == self.author:
+                if str(reply.author.name) == self.author:
                     self.stats["author_children"] += 1
                 else:
                     self.stats["total_children"] += 1
