@@ -689,7 +689,8 @@ class GatherCMVSubAuthor:
                       "cmv_submissions": len([cmv_sub.reddit_id for cmv_sub in 
                             self.db_session.query(SQLACMVSub).filter(
                                 SQLACMVSub.author == redditor_name)]),
-                      "deltas_awarded": 0
+                      "deltas_awarded": 0,
+                      "deltas_received": 0
                 }
 
 
@@ -757,7 +758,12 @@ class GatherCMVSubAuthor:
 
         # Calculate deltas_awarded in all CMV Submissions
         self.stats["deltas_awarded"] = np.sum([cmv_sub.deltas_from_author for cmv_sub in 
-                            self.db_session.query(SQLACMVSub)])
+                            self.db_session.query(SQLACMVSub).filter(
+                                SQLACMVSub.author == self.stats["user_name"])])
+        # Calculate deltas_received in all CMV Comments
+        self.stats["deltas_received"] = np.sum([cmv_sub.deltas_from_OP for cmv_com in 
+                            self.db_session.query(SQLACMVComment).filter(
+                                SQLACMVComment.author == self.stats["user_name"])])
 
     @can_fail
     def get_more_history_for(self, post_prefix, post_type, post_generator):

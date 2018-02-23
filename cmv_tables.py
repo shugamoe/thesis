@@ -81,6 +81,7 @@ class SQLACMVSubAuthor(RedditorMixin, Base):
     cmv_submissions = Column(Integer, nullable=False)
     cmv_comments = Column(Integer, nullable=False)
     deltas_awarded = Column(Integer, nullable=False)
+    deltas_received = Column(Integer, nullable=False)
 
 
 def init_tables(engine):
