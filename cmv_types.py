@@ -761,7 +761,7 @@ class GatherCMVSubAuthor:
                             self.db_session.query(SQLACMVSub).filter(
                                 SQLACMVSub.author == self.stats["user_name"])])
         # Calculate deltas_received in all CMV Comments
-        self.stats["deltas_received"] = np.sum([cmv_sub.deltas_from_OP for cmv_com in 
+        self.stats["deltas_received"] = np.sum([cmv_com.deltas_from_OP for cmv_com in 
                             self.db_session.query(SQLACMVComment).filter(
                                 SQLACMVComment.author == self.stats["user_name"])])
 
