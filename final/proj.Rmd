@@ -1,0 +1,638 @@
+---
+title: "Reciprocation in Opinion Malleability in r/ChangeMyView"
+author: "Julian McClellan"
+date: "April 1, 2018"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    includes:
+      in_header:
+        header.tex
+bibliography: citations.bib
+---
+
+# Abstract
+
+This paper attempts to use the causal inference method of propensity score
+stratification to investigate the possibility of a reciprocation effect in the 
+good-faith debate subreddit r/ChangeMyView. The novel concept and data are
+introduced first, followed by the propensity score stratification procedure,
+calculation of average treatment effect, and a review of the shortcomings of all
+the previous, including but not limited to missing data issues, causal inference
+assumption violations, and an overload of natural language processing options.
+
+# Introduction
+
+The popular social media site, Reddit, is composed of a variety of subcommunities, or "subreddits". One such subreddit, r/ChangeMyView (CMV):
+
+> . . . is a subreddit dedicated to the civil discourse of opinions, and is built around
+the idea that in order to resolve our differences, we must first understand them.
+We believe that productive conversation requires respect and openness, and that
+certitude is the enemy of understanding.
+ 
+Redditors can participate in CMV in one of two main ways. They can post their *opinions*,
+along with supporting reasoning, as *submissions*, or they can *comment* in a submission in an
+*attempt to change the opinion* presented in the submission. If a user posts an opinion, they
+are encouraged to conduct a dialogue with the respondents. The rules of CMV explicitly
+forbid low effort comments, and an active team of moderators stringently enforce all CMV’s
+rules. If a respondent mangages to change the original poster’s (OP) opinion, then the OP can
+award the comment that changed his or her mind a “delta”, along with a brief explanation.
+
+![Example of an Opinion](cmv_opinion.png)
+![OP Awards a a Delta and Interacts with Respondents](cmv_response.png)
+
+Thus, the CMV subreddit allows for access to the reasoning behind a person’s views, the
+full debate that takes place for each view, and an easily extractable outcome of the debate:
+either the opinion is stable and no delta is awarded, or the opinion changes, and at least
+one delta is awarded. CMV is an ideal setting for the study of persuasion (@tan2016winning).
+There are many questions to be explored in CMV, but one that attempts to utilize a casual framework is:
+
+> "For those Reddit users who tried to change opinions in CMV before they tried to submit their own opinions for discussion, what is the effect of them receiving a delta for these previous efforts on the number of deltas they ended up giving for their submissions"
+
+```{r get_raw_dat, include=F, echo = F}
+DL_DATA <- FALSE # Load data from MySQL or from disk?
+
+library(tidyverse)
+library(magrittr)
+knitr::opts_chunk$set(echo = F, message = F)
+
+dbcon <- src_mysql("jmcclellanDB", 
+                   host="mpcs53001.cs.uchicago.edu",
+                   username="jmcclellan",
+                   password="udaeTh5b"
+                  )
+if (DL_DATA){
+  cmv_coms <- dbcon %>%
+    tbl("CMV_Comment") %>%
+    collect() %>%
+    filter(content != "[removed]",
+           content != "[deleted]") %T>%
+    write_rds("cmv_coms.rds")
+  
+  cmv_subs <- dbcon %>%
+    tbl("CMV_Submission") %>%
+    collect() %>%
+    mutate(gave_delta = ifelse(deltas_from_author > 0, 1, 0)) %>%
+    filter(content != "[removed]") %>%
+    mutate(cmv_sub_ind = 1) %T>%
+    write_rds("cmv_subs.rds")
+  
+  std_subs <- dbcon %>%
+    tbl("Submission") %>%
+    collect() %>%
+    filter(content != "[removed]",
+           content != "[deleted]") %T>%
+    write_rds("std_subs.rds")
+  
+  cmv_auths <- dbcon %>%
+    tbl("CMV_Sub_Author") %>%
+    collect() %T>%
+    write_rds("cmv_auths.rds")
+    
+} else {
+  cmv_coms <- read_rds("cmv_coms.rds")
+  cmv_subs <- read_rds("cmv_subs.rds")
+  std_subs <- read_rds("std_subs.rds")
+  cmv_auths <- read_rds("cmv_auths.rds")
+}
+
+```
+
+```{r topic_creation, eval=F, echo=F}
+CREATE_LDA <- FALSE # Create LDA again or load from disk?
+
+# Followed from:
+# https://cran.r-project.org/web/packages/tidytext/vignettes/topic_modeling.html
+library(tidytext)
+library(stringr)
+library(tidyr)
+library(topicmodels)
+if (CREATE_LDA){
+  cmv_subs_col <- cmv_subs %>% collect()
+  
+  by_cmv_sub_word <- cmv_subs_col %>%
+    select(reddit_id, content) %>%
+    unnest_tokens(word, content)
+  
+  word_counts <- by_cmv_sub_word %>%
+    anti_join(stop_words) %>%
+    count(reddit_id, word, sort = TRUE) %>%
+    ungroup()
+  
+  cmv_dtm <- word_counts %>%
+    cast_dtm(reddit_id, word, n)
+  
+  cmv_lda <- LDA(cmv_dtm, k = 7, control = list(seed = 1234))
+  write_rds(cmv_lda, "topic_model.RData")
+} else {
+  cmv_lda <- read_rds("topic_model.RData")
+}
+
+# For the k topics, we create a table with reddit_id of the CMV post as the primary key
+# And the "gamma" score given by the model giving the "probability" that
+# document belongs to a certain topic
+library(glue)
+cmv_lda_doc_top <- tidy(cmv_lda, matrix = "gamma") %>%
+  mutate(topic = paste("topic_", topic, sep = "")) %>%
+  spread(topic, gamma) %>%
+  rename(reddit_id = document)
+
+# Join with cmv submissions
+cmv_subs <- inner_join(cmv_subs, cmv_lda_doc_top)
+```
+
+```{r transform_data}
+library(text2vec)
+prep_fun = function(x) {
+  x %>% 
+    # make text lower case
+    str_to_lower %>% 
+    # remove non-alphanumeric symbols
+    str_replace_all("[^[:alnum:]]", " ") %>% 
+    # collapse multiple spaces
+    str_replace_all("\\s+", " ")
+}
+# subject_authors <- read_rds("subject_authors.RDS")
+
+START_2016 <- 1451606400 # Really should have a better date system in place here. . . 
+END_2016 <- 1483228800
+nth_date <- function(x, order, decrease){
+  u <- unique(x)
+  sort(u, decreasing = decrease)[order]
+}
+
+# CMV Sub authors, their earliest CMV Submission, and the number of CMV Subs
+sub_auths_min_date <- cmv_subs %>%
+  group_by(author) %>%
+  summarise(last_cmv_date = nth_date(date_utc, 1, T),
+            first_cmv_date = nth_date(date_utc, 1, F),
+            tot_cmv_subs = n())
+
+first_cmv_subs <- inner_join(sub_auths_min_date, cmv_subs) %>%
+  filter(date_utc == first_cmv_date)
+
+# Use the min date to do grouping and filtering
+                            # Add a variable to show proportion of past submissions in CMV
+std_subs_info <- inner_join(std_subs %>% mutate(is_cmv_sub = ifelse(subreddit == "r/changemyview", 1, 0)), 
+                            sub_auths_min_date) %>%
+  filter(date_utc < first_cmv_date) %>%
+  inner_join(by = "author", first_cmv_subs %>% select(author, content)) %>%
+  filter(author != "[deleted]") %>%
+  group_by(author) %>%
+  summarise(
+            # Stats from non-CMV submission before first CMV Submission  
+            prev_subs = n(),
+            cmv_sub_prop = sum(is_cmv_sub) / prev_subs, 
+            prev_unique_subs = length(unique(subreddit)),
+            prev_avg_score = mean(score),
+            prev_avg_edits = mean(edited),
+            prev_avg_dcoms = mean(direct_comments),
+            prev_avg_tcoms = mean(total_comments),
+            prev_avg_acoms = mean(author_comments),
+            prev_avg_unique_parts = mean(unique_commentors),
+            prev_avg_score = mean(score),
+            all_text = prep_fun(paste(content.x, content.y, collapse=" ")),
+            sub_text = prep_fun(paste(content.x, collapse=" ")),
+            first_cmv_text = prep_fun(paste(content.y, collapse = " "))
+  ) %>%
+  filter(!(sub_text %in% c("", " ", "  ")))
+```
+
+```{r sim_scores}
+# tfidf = TfIdf$new()
+tfidf = LSA$new(n_topics = 100)
+
+# http://text2vec.org/similarity.html
+vectorizer <- prep_fun(std_subs_info$all_text) %>%
+  itoken(progressbar=F) %>%
+  create_vocabulary() %>%
+  prune_vocabulary(doc_proportion_max = 0.1, term_count_min = 5) %>%
+  vocab_vectorizer()
+
+library(purrr)
+sub_dtm <- std_subs_info$sub_text %>% itoken(., progressbar=F) %>%
+  create_dtm(vectorizer) %>%
+  fit_transform(tfidf)
+
+first_cmv_dtm <- std_subs_info$first_cmv_text %>% itoken(., progressbar=F) %>%
+  create_dtm(vectorizer) %>%
+  fit_transform(tfidf)
+
+par_scores <- psim2(sub_dtm, first_cmv_dtm, method = "cosine", norm = "l2")
+std_subs_info <- std_subs_info %>%
+  mutate(sim_scores = par_scores)
+
+std_subs_info %>% 
+  ggplot(aes(x = sim_scores)) + 
+  geom_histogram(bins = 50)
+```
+
+```{r eval=F}
+cmv_coms_info <- inner_join(cmv_coms, sub_auths_min_date) %>%
+  # Don't count CMV comments posted on their own posts (Impossible to get a delta from yourself!)
+  inner_join(cmv_subs %>% select(author, reddit_id, date_utc, direct_comments, content)
+             %>% rename(sub_auth = author, sub_id = reddit_id, sub_date = date_utc), 
+             by=c("parent_submission_id" = "sub_id")) %>%
+  filter(sub_auth != author) %>%
+  filter(date_utc < first_cmv_date) %>%
+  # filter(!((author %in% subject_authors) & (sub_auth %in% subject_authors))) %>%
+  mutate(cmv_com_ind = 1,
+         direct_reply_ind = ifelse(is.na(parent_comment_id), 1, 0),
+         
+         # Create variable showing the lag time in minutes (originally ms) between
+         # the CMV comment and the original post
+         lag_time = abs((date_utc - sub_date) / (1000 * 60))
+         ) %>% 
+  group_by(author) %>%
+  summarise(
+            prev_cmv_coms = sum(cmv_com_ind),
+            prev_cmv_direct_coms = sum(direct_reply_ind),
+            prev_cmv_avg_OP_deltas = mean(deltas_from_OP),
+            prev_cmv_avg_other_deltas = mean(deltas_from_other),
+            prev_cmv_sub_avg_direct_coms = mean(direct_comments),
+            prev_cmv_com_avg_lag = mean(lag_time),
+            
+  ) %>%
+  mutate(delta_treatment = ifelse(prev_cmv_avg_OP_deltas > 0, 1, 0)) %>% # Only count deltas received from an OP
+  mutate(delta_treatment = factor(delta_treatment, levels=c(0, 1), labels=c("No Delta", "Delta")))
+
+cmv_sub_info <- inner_join(cmv_subs, sub_auths_min_date) %>%
+  filter(date_utc <= last_cmv_date) %>%
+  group_by(author) %>%
+  summarise(
+            prev_cmv_subs = n(),
+            outcome_deltas_given = sum(gave_delta),
+            outcome_delta_rate = outcome_deltas_given / prev_cmv_subs,
+            deltas_from_other = sum(deltas_from_other),
+  )
+
+reg_form <- inner_join(std_subs_info, cmv_coms_info) %>%
+  inner_join(cmv_auths %>% select(user_name, cmv_submissions), by=c("author" = "user_name")) %>%
+  inner_join(cmv_sub_info) %>%
+  filter(author != "[deleted]")
+
+subject_authors <- unique(reg_form$author)
+write_rds(subject_authors, "subject_authors.RDS")
+```
+
+
+# Data
+
+## Subjects
+The subjects of interest, specifically, are Reddit users who have participated
+on CMV by posting submissions (their views), but have also participated in CMV
+via comments (attempting to change a view) before their first CMV submission. Of
+these, there are `r nrow(reg_form)` "subject" authors meeting this criteria of
+`r nrow(cmv_auths)` authors in total who posted CMV submissions in 2016. 
+
+## Important variables.
+Our treatment variable, `delta_treatment` is a binary variable indicating
+whether or not the given subject author received a delta in any of their
+previous CMV comments from the original poster of that comment. Also, while this
+is hard to demonstrate in practice, this treatment assignment would seem to be independent 
+of the potential outcomes of `outcome_deltas_given`. After all, if a subject author
+is deciding whether or not responses from the CMV community change his mind,
+they don't explicitly take into account whether or not they themselves had
+received a delta before.
+
+There are a number of factors that can contribute to the `delta_treatment` assignment.
+Perhaps most obviously is the number of attempts (CMV comments) the subject author has made to
+change the opinions of Reddit users. These are represented in the variables `prev_cmv_coms` and
+`prev_cmv_direct_coms`. It is important to determine the subject author's direct
+comments as well as all of their comments. A direct CMV comment replies directly
+to the opinion at hand, while there are those that are more "nested" in the
+discussion such as replies of replies of direct replies. While the OP of a CMV
+submission is free to award nested comments with a delta, they are far more
+likely to award direct comments a delta.
+
+Some topics are more contentious than others, and given the diverse subject
+matter on CMV. The subject authors might be attempting to change the opinion
+concerning a humorous topic, nascent social issues, or something inspired from
+the news-cycle at the time. To account for this, I create a Latent Dirichlet
+Allocation (LDA) topic model that assumes 7 different topics are present in *all* 
+the CMV submissions gathered in the data. Each CMV submission is then given a
+score  for each of the 7 topics ($0 \leq \gamma_k \leq 1 | k={1...7} | \sum \gamma_k = 1$).
+For each subject author, the average of the 7 topic scores for all the
+submissions they commented on is recorded (`prev_topic_{k}_score`).
+
+The quality and timing of the dicussion can also impact `delta_treatment`. In this study,
+discussion quality is flattened into `prev_cmv_sub_avg_direct_coms`. It is important
+to have a measure of discussion quality as one can imagine that the lack (or excess) of
+direct comments for a given opinion might raise or lower the subject author's
+chances of having their own comment awarded a delta. As for timing, previous research
+has shown that comments made earlier in the life of a submission are more likely to receive a delta @tan2016winning. Thus, the average lag time between the CMV submissions and the CMV comments is present as `prev_cmv_com_avg_lag` (minutes).
+
+# Propensity Score Stratification
+
+## Preliminary View
+
+Because I am interested in the effect of `delta_treatment` on
+`outcome_delta_rate`, but since `delta_treatment` assignment can be affected by
+some variables (as discussed above), I utilize propensity score stratification
+to try and discern the average treatment effect (ATE).
+
+Below is a basic table showing the difference in the `outcome_delta_rate`
+between the two `delta_treatment` groups: "Delta" and "No Delta". There is also
+a basic t-test between these two groups, showing a statistically significant
+difference between the means of `outcome_delta_rate` between the two groups.
+
+```{r prop_score_strat}
+# Based off of
+# https://sejdemyr.github.io/r-tutorials/statistics/tutorial8.html
+library(MatchIt)
+theme_set(theme_minimal())
+
+reg_form %>%
+  group_by(delta_treatment) %>%
+  summarise(n_redditors = n(),
+            mean_delta_rate = mean(outcome_delta_rate),
+            std_error = sd(outcome_delta_rate) / sqrt(n_redditors))
+
+with(reg_form, t.test(outcome_deltas_given ~ delta_treatment))
+```
+
+## Investigate Covariates  
+
+In the data section, I discussed the potential of 11 covariates having affects
+on `delta_treatment`. Even with a visual inspection, the variables `prev_cmv_coms`, `prev_cmv_direct_coms`, `prev_cmv_sub_avg_direct_coms`, `prev_cmv_com_avg_lag` seem to have different means across the two treatment groups.
+
+```{r pcovs}
+reg_form_cov <- c("prev_cmv_coms", "prev_cmv_direct_coms", "prev_cmv_sub_avg_direct_coms", "prev_cmv_com_avg_lag",
+                  "prev_topic_1_score", "prev_topic_2_score", "prev_topic_3_score",
+                  "prev_topic_4_score", "prev_topic_5_score", "prev_topic_6_score") # Full
+# reg_form_cov <- c("prev_cmv_sub_avg_direct_coms", "prev_cmv_com_avg_lag", "prev_topic_3_score") # Filtered (sensitvity)
+reg_form %>%
+  group_by(delta_treatment) %>%
+  select(one_of(reg_form_cov)) %>%
+  summarise_all(funs(mean(., na.rm = T)))
+```
+
+Utilizing t-tests for each variable between the two groups we see that a number
+of covariates whose means have (95%) statistically significant differences between
+the values of `delta_treatment`. 
+
+```{r pcov_t, warning=FALSE}
+library(purrr)
+library(knitr)
+kable(
+  with(reg_form, 
+    map_dfr(reg_form_cov, function(v) {
+      require(glue)
+      test_results <- t.test(unlist(reg_form[, v]) ~ delta_treatment)
+      pval <- test_results$p.value
+      if (pval > .05){
+        sig <- "Not Significant (95%)"
+      } else {
+        sig <- "Significant (95%)"
+      }
+        as.data.frame(list(covar = v, p_value = pval, significant = sig))
+    })
+  )
+)
+```
+
+## Estimate Propensity Score
+
+The propensity score will be estimated using a logit model of `delta_treatment`
+on the aforementioned important covariates.
+
+```{r est_prop_score, warning=FALSE}
+form <- as.formula(paste("delta_treatment ~ ", paste0(reg_form_cov, collapse = " + ")))
+
+
+m_ps <- glm(form, family=binomial(), data=reg_form)
+summary(m_ps)
+```
+
+Also, interestingly enough, the only significant elements of
+this logistic model (95%) are: `prev_topic_3_score`, `prev_cmv_com_avg_lag`, 
+and `prev_cmv_sub_avg_direct_coms`. In other words, it appears that, when
+controlling for the aforementioned important variables, it appears that earlier
+comments, attempting to change the opinion of certain topics, when there are
+fewer direct replies leads to a higher predicted probability of `delta_treatment`.
+
+## Examine Common Support
+
+```{r apply_ps}
+library(modelr)
+logit2prob <- function(x){
+  (exp(x) / (1 + exp(x)))
+}
+
+reg_form <- reg_form %>%
+  add_predictions(m_ps) %>%
+  mutate(prob = logit2prob(pred))
+
+
+reg_form %>%
+  ggplot(aes(x = prob)) +
+  geom_histogram(bins = 10) + 
+  facet_wrap(as.formula(paste("~", "delta_treatment"))) +
+  xlab("Prop-Score") +
+  labs(title = "Propensity Score by Treatment Group")
+  
+```
+
+Looking at this histogram, one can see that the task of predicting
+`delta_treatment` as "Delta" appears to be difficult (assuming a 50% probability
+cutoff). However, there does appear to be a viable region of common support, as
+we can see in the table below.
+
+```{r support_table}
+(support_table <- reg_form %>%
+  group_by(delta_treatment) %>%
+  summarise(count = n(), min_prob = min(prob), max_prob = max(prob)))
+```
+
+There are `r 644 + 109` observations in total, but those falling outside of the
+common support will be omitted during the stratification procedure.
+
+## Stratification
+
+Utilizing R's `MatchIt` (@matchit) package we utilize the propensity score calculated above
+to stratify the sample into 3 separate subclasses. While this is unfortunately
+fewer than I would have liked, but after removing observations falling outside
+the common support there are only `604` left. Even with the reduced number of
+strata some balance statistics are still not ideal.
+
+```{r matching_alg, warning=F, message=F}
+# reg_form_cov <- c("prev_unique_subs", "prev_avg_edits", "prev_cmv_coms", "prev_avg_score")
+# reg_form_cov <- c("prev_avg_edits")
+reg_form_nomiss <- reg_form %>%  # MatchIt does not allow missing values
+  mutate(delta_treatment = ifelse(delta_treatment == "No Delta", 0, 1)) %>%
+  na.omit()
+form <- as.formula(paste("delta_treatment ~ ", paste0(reg_form_cov, collapse = " + ")))
+
+# Have binary coding!
+mod_match <- matchit(form,
+                     method = "subclass", data = reg_form_nomiss,
+                     subclass = 3,
+                     discard = "both",
+                     reestimate = F
+                     )
+dta_m <- match.data(mod_match)
+t <- summary(mod_match, standardize = T)
+
+(t$sum.matched)
+(t$qn)
+ot <- plot(mod_match, type = "jitter")
+(ot)
+```
+
+These strata are definitely not of equal size, at least between strata
+(subclasses). Only subclass #3 has it's treatment/control split approximately
+equal. Additionally, looking at the balance statistics for certain covariates is
+concerning. However, since I am doing propensity score stratification, I am more
+concerned with the balance for the propensity score, which is `distance` above, 
+and the statistics concerning it compare favorably to the covariates that help comprise it. ([Legend for balance statistics.](https://r.iq.harvard.edu/docs/matchit/2.4-20/The__TT_summary_TT__Co.html))
+
+Additionally, a "jitter" plot showing the propensity scores of units matched into a strata and those that were not (i.e. those outside the common support), is provided.
+
+# Average Treatment Effect Estimation
+
+Now, I utilize the R package `Zelig` (@zelig) to estimate the ATE across each subclass
+with a 95% confidence interval. Our outcome of interest is
+`outcome_deltas_given`, which indicates the number of deltas each subject author
+awarded in their CMV submissions *after* their period of CMV comments which I
+utilized to calculate their propensity score.
+
+```{r zelig_ate, message=FALSE, warning=F}
+library(Zelig)
+
+check_form <- paste("outcome_deltas_given ~ delta_treatment + ",
+                    paste0(reg_form_cov, 
+                           "+ prev_cmv_subs", collapse = " + "))
+zelig.out <- zelig(check_form, data = match.data(mod_match),
+                   by = "subclass", model = "ls",
+                   cite = F)
+
+x.out1 <- setx(zelig.out, data = match.data(mod_match, "delta_treatment"), 
+               fn = NULL, cond = TRUE)
+s.out1 <- sim(zelig.out, x = x.out1, y = "outcome_deltas_given")
+(sum <- summary(s.out1))
+```
+
+The key take away from the above (admittedly cluttered) figure are the `2.5%`
+and `97.5%` numbers under `pv` (predicted value). These are `Zelig`'s way of
+indicating the 95% confidence interval for the ATE on `outcome_deltas_given`.
+Note that none of these confidence intervals indicate a statistically significant 
+effect. Additionally, because `outcome_deltas_given` inherently relies on the number 
+of CMV submissions the subject authors made, we include it as a variable when estimating the ATE.
+
+# Shortcomings and Design Decisions
+
+Unfortunately, even as I was trying to push this observational data towards
+something more quasi-experimental, I realized I had a lot of leeway in how
+exactly I framed the problem and the elements comprising it.
+
+## Treatment Definition and Effect
+
+`delta_treatment`, though defined as a binary treatment variable, actually
+flattens any value of deltas received above 1 to 1. That is, the treatment is
+more accurately defined as an ordinal multi-valued treatment, as it is possible
+for the subject authors to receive anywhere 0 to the number of CMV comments they
+made deltas before they began their own CMV submissions. However, given the 
+relative sparsity of higher valued deltas, I elected to binarize the treatment.
+Binarization also made things like propensity score stratification less complicated. 
+
+## Missing Data
+
+Reddit Submissions can be "live" for a period of 6 months before further activity
+on the submission (editing, new comments) is suspended, effectively "archiving"
+the it. Within that 6 month period, however, comments and submissions can either 
+be deleted by the user, or removed by moderators of a subreddit for violating
+rules. When gathering the data used for this exercise, I ensured that all
+submissions utilized in the data were over 6 months old, eliminating the
+possibility of new activity. Unfortunately, a not-insignificant amount of
+submissions and comments gathered were either deleted or removed, eliminating the link 
+back to their original authors. It would be naive to think that this pattern of 
+missing data is random in nature, and thus this leaves one of a few sore marks
+on this paper.
+
+Additionally, there are many more CMV submissions and comments available for 
+inference. I was unable to gather these due to time constraints, but gathering them may have allowed for a greater number of strata, or at least more balanced strata.
+
+## Stable Unit Treatment Value Assumption (SUTVA)
+
+This requires that the potential outcome (`outcome_deltas_given`) of one unit
+is not affected by the particular treatment assignment (`delta_treatment`) of
+other units. However, it is quite easy to think of a counter-example in which
+this assumption is violated.
+
+There are two subject authors, `S0` and `S1`, `S0` actively posted CMV comments
+from `time = 0` to `time = 5` while `S1` actively posted CMV submissions over the
+same period. If `S0` posted comments on *any* of `S1`'s submissions, then (SUTVA)
+is violated, because `S1`'s `outcome_deltas_given` then has direct interaction
+with `S0`'s `delta_treatment` value.
+
+```{r sutva_investigate}
+sutva_info <- inner_join(cmv_coms, sub_auths_min_date) %>%
+  # Don't count CMV comments posted on their own posts (Impossible to get a delta from yourself!)
+  inner_join(cmv_subs %>% select(author, reddit_id, date_utc, direct_comments,
+                                 topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7) 
+             %>% rename(sub_auth = author, sub_id = reddit_id, sub_date = date_utc), 
+             by=c("parent_submission_id" = "sub_id")) %>%
+  filter(sub_auth != author) %>%
+  filter(date_utc < first_cmv_date)
+
+
+sutva_violations <- sutva_info %>%
+  filter((author %in% subject_authors) & (sub_auth %in% subject_authors))
+
+perct <- round(100 * nrow(sutva_violations) / nrow(sutva_info), 2)
+```
+
+Just how prevalent is this problem? Among the `r nrow(sutva_info)` total CMV comments
+used to create information on the subject author's, `r nrow(sutva_violations)`
+of these comments (`r perct`%) violate the SUTVA assumption. Out of the `r nrow(reg_form)` subject authors in the analysis,
+`r length(unique(sutva_violations$author))` have violating comments.
+
+```{r}
+reg_form %>%
+  ggplot(aes(x = prev_cmv_coms)) +
+  geom_density() + 
+  labs(title = "Subject author's previous CMV Comments")
+```
+
+While it's possible to remove the CMV comments that violate the SUTVA assumption,
+there are so many subject authors with only a single CMV comment, that doing this
+thins the data too much, such that only 2 or fewer strata can be utilized, leaving too much selection bias in the problem. At the same time, this does not significantly affect the results from above, as there is still no evidence of `delta_treatment` having a significant effect on `outcome_deltas_given`.
+
+## CMV Submission Content/Topic
+
+Given that one of the central topics of this paper is the changing of opinions (via receiving and giving deltas), the topics and content of the opinions would definitely have an impact on how difficult they may be to change. Before, I mentioned that each of the CMV Submissions the subject authors commented on was given 7 "topic scores" using LDA topic modelling in an attempt to shed some light on the subject matter, this in turn was integrated into the propensity score. Additionally, I experimented (as a sort of rough sensitivty analysis) with changing the number of assumed topics (`k`), as well as including the average topic scores of each subject author's CMV Submissions as a control variable in the calculation of ATE. However prudent any of these experiments may have been there was still no change in the non-significant takeaway result.
+
+Topic modelling is not the only way to glean information from the content of a CMV Submission. @tan2016winning utilized Markdown syntax, pronoun types, link types, and the number of paragraphs, among others. Such features would have been useful to have, especially given the past history of using propensity score measures with hundreds of covariates! Unfortunately, I am one person, and not 4 from Cornell.
+
+## User Identification and Demographics
+
+Because new Reddit accounts can be created relatively quickly, there is no 
+guarantee that the number of subject authors is exactly the number of unique
+individuals in the study. That is, some subject authors that may have otherwise
+been subject authors were not counted as such because they split up their
+previous CMV comments to one account and their submissions to another (or
+vice-versa). Unlike more traditional sociological studies utilizing causal
+inference methods, I have little reliable information that identifies and
+characterizes the subject authors.
+
+# Conclusion
+
+In this paper I attempted to utilize data present in r/ChangeMyView, a unique
+community of Reddit, and propensity score stratification, to find evidence of
+reciprocation in opinion malleability. However, given the observational nature
+of the data, the sparcity stemming from the way in which I chose to frame the
+problem (treatment/outcome), and the actual scale of the NLP problem, I found
+the task rather difficult.
+
+My final result was able to utilize a lower number of strata than I would have
+liked, letting some bias remain. Without knowing the nature of that bias, I am
+a little wary of both the null result, and any changes brought about by
+sensitivty analysis, which in this case (not shown) was simply including quadratic terms and
+interactions of variables with differing variances and correlations, between the treatment groups.
+
+Even with my disappointment I have a newfound respect of the precision and
+diligence required to utilize causaul inference methods with more experimental and more traditional data.
+
+\newpage
+
+# Citations
