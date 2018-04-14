@@ -1,5 +1,5 @@
 ---
-title: "Reciprocation in Opinion Malleability in r/ChangeMyView"
+title: "Persuasion Susceptibility in r/ChangeMyView | An Exploration of Self-Affirmation, Reciprocation, and other Historical Information"
 author: "Julian McClellan"
 date: "April 1, 2018"
 output: 
@@ -13,15 +13,20 @@ bibliography: citations.bib
 
 # Abstract
 
-This paper attempts to use the causal inference method of propensity score
-stratification to investigate the possibility of a reciprocation effect in the 
-good-faith debate subreddit r/ChangeMyView. The novel concept and data are
-introduced first, followed by the propensity score stratification procedure,
-calculation of average treatment effect, and a review of the shortcomings of all
-the previous, including but not limited to missing data issues, causal inference
-assumption violations, and an overload of natural language processing options.
+Using information from the good faith debate subreddit r/ChangeMyView, this paper
+utilizes historical information on users who submit their opinion in this debate
+space, in order to see whether this information can be used to predict whether
+said users will end up changing their opinion in the face of persuasion. Some
+user history is evaluated under the psychological theory of self-affirmation, in
+an attempt to test the  theory's viability in an online context. Another concept
+tested is the idea of "community reciprocity", where users' susceptibility to
+persuasion is correlated with their previous attempts to change other user
+opinions. Additional user information, not directly applicable to reciprocity or
+self-affirmation,  is utilized as a means of classing similar users.
+
 
 # Introduction
+
 
 The popular social media site, Reddit, is composed of a variety of subcommunities, or "subreddits". One such subreddit, r/ChangeMyView (CMV):
 
@@ -31,23 +36,63 @@ We believe that productive conversation requires respect and openness, and that
 certitude is the enemy of understanding.
  
 Redditors can participate in CMV in one of two main ways. They can post their *opinions*,
-along with supporting reasoning, as *submissions*, or they can *comment* in a submission in an
-*attempt to change the opinion* presented in the submission. If a user posts an opinion, they
-are encouraged to conduct a dialogue with the respondents. The rules of CMV explicitly
-forbid low effort comments, and an active team of moderators stringently enforce all CMV’s
+along with supporting reasoning, as *submissions*, or they can *comment* directly on  a submission in an
+*attempt to change the opinion*. If a user posts a view, the subreddit's rules
+require them to respond to any comments, attempts to change the view, within
+three hours otherwise the post is removed. The rules of CMV also 
+forbid low effort comments, and an active team of moderators stringently enforce all of CMV’s
 rules. If a respondent mangages to change the original poster’s (OP) opinion, then the OP can
-award the comment that changed his or her mind a “delta”, along with a brief explanation.
+award the comment that changed his or her mind a “delta”, by replying directly to the worthy 
+comment with a signal that a delta has been awarded (typically "!delta"), along with a brief explanation
+of why the comment changed their view. While uncommon, it is also possible for
+another user that is not the OP, who one might presume holds a similar view, to award deltas as well.
 
-![Example of an Opinion](cmv_opinion.png)
-![OP Awards a a Delta and Interacts with Respondents](cmv_response.png)
+![Example of an Opinion](figs/cmv_opinion.png)
+![OP interacts with respondent and awards a "Delta". "DeltaBot"" confirms the delta, adding to the display of awarded deltas for the user "velvykat5731" ](figs/cmv_response.png) 
 
-Thus, the CMV subreddit allows for access to the reasoning behind a person’s views, the
-full debate that takes place for each view, and an easily extractable outcome of the debate:
-either the opinion is stable and no delta is awarded, or the opinion changes, and at least
-one delta is awarded. CMV is an ideal setting for the study of persuasion (@tan2016winning).
-There are many questions to be explored in CMV, but one that attempts to utilize a casual framework is:
+Before the delta is officially awarded to a respondent, a bot (*DeltaBot*) must confirm it.
+Assuming the OP's explanation is long enough (a sentence or two), DeltaBot responds to the 
+OP's delta signalling comment to confirm the award. After this confirmation, any
+comment that the user who received the delta makes, will have an updated total
+of deltas awarded to the right of their name. This confirmation also contributes
+to a record of deltas on a separate subreddit, r/DeltaLog, a browseable archive
+of comments that received deltas in r/ChangeMyView. Additionally, the wiki of r/ChangeMyView 
+also features a Deltaboards section which tracks the users with the most deltas
+awarded daily, weekly, and monthly.
 
-> "For those Reddit users who tried to change opinions in CMV before they tried to submit their own opinions for discussion, what is the effect of them receiving a delta for these previous efforts on the number of deltas they ended up giving for their submissions"
+![The Front Page of r/DeltaLog. Delta winning comments are sorted by submission.](figs/delta_log.png)
+
+![Weekly and Monthly Sections of the Deltaboards](figs/delta_boards.png)
+
+Thus, the CMV subreddit allows for access to the reasoning behind a person’s
+views, the debate that takes place for each view, and an easily extractable
+outcome of the debate: either the opinion is stable and no delta is awarded, or
+the opinion changes, and at least one delta from the OP is awarded. CMV is an ideal setting
+for the study of persuasion (@tan2016winning). There are many questions to be
+explored in CMV, but one that leverages the open nature of Reddit user histories is:
+
+> "Using what we know about a user who submits a view to CMV, can we predict if they will
+change their opinion?"
+
+Using submissions and author histroy scraped from CMV activity in 2016, I construct several
+relevant features to help predict an opinion change/delta awarding. Like Tan et al. I utilize
+the wording of the opinion itself, but I also go beyond and construct features from the OP’s
+prior submission history. Like Tan et al. I create some features linked to self-affirmation
+theory in psychology, but also utilizes features specific to the place of submissions in Reddit
+overall.
+
+I utilize weighted logistic regression models and outperform earlier attempts to predict the
+opinion change on CMV. Whereas previous psychological studies have found the effects of
+self-affirmation in the immediate past to be statistically significant in predicting opinion
+malleability (Cohen, Aronson, and Steele 2000), the models here find that self-affirmation
+features utilizing the entirety of an OP’s submission history, dating back months and sometimes
+years, also have signifiant effects in the same domain. Thus, this paper provides the first
+evidence to suggest that self-affirmation has such far-reaching effects.
+
+Persuasion is a topic of a large research effort in a number of fields. There's psychology and a number of its subfields, 
+of course, but also fields like international relations, linguistics, and
+human-computer interaction are concerned with how persuasion is manifested in a
+variety of contexts [@nye2004soft, @martin1995lingpers, @kaptein2009can]. 
 
 ```{r get_raw_dat, include=F, echo = F}
 DL_DATA <- FALSE # Load data from MySQL or from disk?
@@ -67,7 +112,7 @@ if (DL_DATA){
     collect() %>%
     filter(content != "[removed]",
            content != "[deleted]") %T>%
-    write_rds("cmv_coms.rds")
+    write_rds("pre_model_data/cmv_coms.rds")
   
   cmv_subs <- dbcon %>%
     tbl("CMV_Submission") %>%
@@ -75,19 +120,19 @@ if (DL_DATA){
     mutate(gave_delta = ifelse(deltas_from_author > 0, 1, 0)) %>%
     filter(content != "[removed]") %>%
     mutate(cmv_sub_ind = 1) %T>%
-    write_rds("cmv_subs.rds")
+    write_rds("pre_model_data/cmv_subs.rds")
   
   std_subs <- dbcon %>%
     tbl("Submission") %>%
     collect() %>%
     filter(content != "[removed]",
            content != "[deleted]") %T>%
-    write_rds("std_subs.rds")
+    write_rds("pre_model_data/std_subs.rds")
   
   cmv_auths <- dbcon %>%
     tbl("CMV_Sub_Author") %>%
     collect() %T>%
-    write_rds("cmv_auths.rds")
+    write_rds("pre_model_data/cmv_auths.rds")
     
 } else {
   cmv_coms <- read_rds("cmv_coms.rds")
@@ -152,6 +197,7 @@ prep_fun = function(x) {
     # collapse multiple spaces
     str_replace_all("\\s+", " ")
 }
+  browser()
 # subject_authors <- read_rds("subject_authors.RDS")
 
 START_2016 <- 1451606400 # Really should have a better date system in place here. . . 
@@ -274,7 +320,31 @@ reg_form <- inner_join(std_subs_info, cmv_coms_info) %>%
 subject_authors <- unique(reg_form$author)
 write_rds(subject_authors, "subject_authors.RDS")
 ```
+# Literature Review
 
+## Persuasion and Malleability 
+
+Before the advent of social media websites like Facebook or Reddit, research efforts into
+persuasion (and by extension, malleability) were mostly confined to laboratory settings,
+but thanks to the increasing number of social interactions online, interpersonal persuasion
+has become observable on a massive scale [@fogg2008mass]. Tan et al. explored persuasion in
+r/ChangeMyView, [-@tan2016winning]. CMV is particularly conducive to the study of mass interpersonal
+persuasion, as posters must state the reasoning behind their views, and successful arguments
+must be awarded with explicit confirmation. Thus, the outcome of the persuasion efforts,
+reasoning behind people’s views, and the full interactions are accessible.
+With access to this information, Tan et al. focused primarily on how interaction dynamics and
+choice of language within arguments were associated with a successful change in someone’s
+3
+opinion. A third focus of the study was an attempt to determine the malleability of an
+opinion, i.e. the likelihood that the holder of that opinion would award successful arguments
+to change it. Assuming that at least 10 unique challengers to the opinion were present, and
+that the holder of the opinion responded at least once, Tan et al. analyzed the way in which
+the opinion was presented and attempted to predict whether or not it could be changed.
+This last task, attempting to determine the malleability of an opinion without respect to any
+of the arguments attempting to change it, was difficult indeed, and Tan et al. only achieved
+an out of sample ROC of .54 with their best model. Still, using weighted logistic regression,
+they found some significant features consistent with self-affirmation theory (Cohen, Aronson,
+and Steele 2000; Correll, Spencer, and Zanna 2004).
 
 # Data
 
