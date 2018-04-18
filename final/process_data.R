@@ -22,12 +22,45 @@ utc_days_to_ms <- function(days){
 }
 
 
+# Function to calculate "subreddit" impurity
+calc_subred_gini <- function(user, df, days_between){
+  require(tidyverse)
+  require(ineq)
+  require(glue)
+  require(readr)
+  
+  auth_info_fp <- glue("pre_model_data/auth_gini/{user}_db_{days_between}.RData")
+  if (!file.exists(auth_info_fp)){
+    df <- df %>%
+      filter(author == user)
+    subreddits <- df$subreddit
+    
+    if (length(subreddits) == 0){
+      return(-1)
+    }
+    
+    work_tibble <- tibble(id = 1:length(subreddits), subreddit = subreddits)
+    sr <- subreddits
+    
+    sr_probs <- work_tibble %>%
+      group_by(subreddit) %>%
+      summarise(prob = n() / length(sr))
+    ineq <- ineq(sr_probs$prob, type = "Gini")
+    write_rds(list(user = user, ineq = ineq), auth_info_fp)
+  } else {
+    user_info <- read_rds(auth_info_fp)
+    ineq <- user_info$ineq
+  }
+  ineq 
+}
+
 ###
-# Main Function
+# Main Function. Processes data with given parameters
 ###
 process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
                          lda_topics = 7,
-                         max_days_between = Inf
+                         max_days_between = Inf,
+                         get_second_dat = F
                          ){
   require(tidyverse)
   require(topicmodels)
@@ -37,14 +70,14 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   require(glue)
   require(ineq)
   require(purrr)
+  require(sentimentr)
   
-  DL_DATA <- dl_data # Load data from MySQL or from disk?
   dbcon <- src_mysql("jmcclellanDB", 
                      host="mpcs53001.cs.uchicago.edu",
                      username="jmcclellan",
                      password="uderpTh5b"
   )
-  if (DL_DATA){
+  if (dl_data){
     print("Downloading Data")
     cmv_coms <- dbcon %>%
       tbl("CMV_Comment") %>%
@@ -66,10 +99,10 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
     
   } else {
     print("Loading from raw data")
-    cmv_coms <- read_rds("pre_model_data/cmv_coms_raw.rds")
-    cmv_subs <- read_rds("pre_model_data/cmv_subs_raw.rds")
-    std_subs <- read_rds("pre_model_data/std_subs_raw.rds")
-    cmv_auths <- read_rds("pre_model_data/cmv_auths_raw.rds")
+    cmv_coms <- read_rds("pre_model_data/db_data/cmv_coms_raw.rds")
+    cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs_raw.rds")
+    std_subs <- read_rds("pre_model_data/db_data/std_subs_raw.rds")
+    cmv_auths <- read_rds("pre_model_data/db_data/cmv_auths_raw.rds")
   }
   
   # Want Raw data or do some basic filtering? 
@@ -78,29 +111,35 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
       filter(content != "[removed]",
              content != "[deleted]")
     
+    temp <- seq(from = 1, by = 1, length.out = nrow(cmv_subs %>%
+                                                      filter(content != "[removed]")))
     cmv_subs <- cmv_subs %>%
       mutate(gave_delta = ifelse(deltas_from_author > 0, 1, 0)) %>%
       filter(content != "[removed]") %>%
-      mutate(cmv_sub_ind = 1)
+      mutate(cmv_sub_ind = 1,
+             content = unlist(strsplit(content, "\n\n>"))[temp]
+             ) # ^ Remove CMV Moderator Message
+    t <- length(unique(cmv_subs$content))
     
     std_subs <- std_subs %>% 
     filter(content != "[removed]",
            content != "[deleted]")
-    raw_add <- "_raw"
-  } else {
     raw_add <- ""
+  } else {
+    raw_add <- "_raw"
   }
 
   # Write to disk for future reference
-  print("Writing dat")
   cmv_auths %>% 
-    write_rds(glue("pre_model_data/cmv_auths{raw_add}.rds"))
+    write_rds(glue("pre_model_data/db_data/cmv_auths{raw_add}.rds"))
   cmv_coms %>%
-    write_rds(glue("pre_model_data/cmv_coms{raw_add}.rds"))
+    write_rds(glue("pre_model_data/db_data/cmv_coms{raw_add}.rds"))
   cmv_subs %>%
-    write_rds(glue("pre_model_data/cmv_subs{raw_add}.rds"))
+    write_rds(glue("pre_model_data/db_data/cmv_subs{raw_add}.rds"))
   std_subs %>%
-    write_rds(glue("pre_model_data/std_subs{raw_add}.rds"))
+    write_rds(glue("pre_model_data/db_data/std_subs{raw_add}.rds"))
+  
+  
   
   
   ###
@@ -111,13 +150,42 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
     group_by(author) %>%
     summarise(last_cmv_date = nth_date(date_utc, 1, T),
               first_cmv_date = nth_date(date_utc, 1, F),
+              second_cmv_date = nth_date(date_utc, 2, F),
               tot_cmv_subs = n())
   
   
   
   ### 
-  # Score CMV Submissions with LDA Topic Model
+  # Get a "perplexity" score from "Warp" algo LDA topic model
   ###
+  warp_topic_model_fp <- glue("pre_model_data/warp_topic_model_k_{lda_topics}.RData")
+  if (!file.exists(warp_topic_model_fp)){
+    tokens <- cmv_subs$content %>% 
+      tolower %>% 
+      word_tokenizer
+    it <- itoken(tokens, progressbar = FALSE)
+    v <- create_vocabulary(it) %>% 
+      prune_vocabulary(term_count_min = 10, doc_proportion_max = 0.2)
+    vectorizer <- vocab_vectorizer(v)
+    cmv_dtm <- create_dtm(it, vectorizer, type = "dgTMatrix")
+    
+    cmv_lda <- LDA$new(n_topics = lda_topics, doc_topic_prior = 0.1, topic_word_prior = 0.01)
+    doc_topic_distr <- cmv_lda$fit_transform(x = cmv_dtm, n_iter = 1000, 
+                              convergence_tol = 0.001, n_check_convergence = 25, 
+                              progressbar = FALSE)
+    
+    # Calculate "perplexity". I.e. topic number heuristic (low better)
+    perp <- perplexity(cmv_dtm, 
+               topic_word_distribution = cmv_lda$topic_word_distribution,
+               doc_topic_distribution = doc_topic_distr)
+    
+    model_and_perp <- list(lda_mod = cmv_lda, perp = perp)
+    write_rds(model_and_perp, warp_topic_model_fp)
+  } else {
+    cmv_lda <- read_rds(warp_topic_model_fp)$lda_mod
+  }
+  
+  # Now have a topic model for scoring
   topic_model_fp <- glue("pre_model_data/topic_model_k_{lda_topics}.RData")
   if (!file.exists(topic_model_fp)){
     cmv_subs_col <- cmv_subs
@@ -148,24 +216,62 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
     spread(topic, gamma) %>%
     rename(reddit_id = document)
   
-  # Join with cmv submissions
+  # Filter down to first cmv_subs for each author only, extract sentiment and wc
   first_cmv_subs <- inner_join(sub_auths_min_date, cmv_subs) %>%
-    filter(date_utc == first_cmv_date)
-  
+    filter(date_utc == first_cmv_date) %>%
+    dplyr::rename(first_cmv_op_coms = author_comments, 
+                  first_cmv_total_coms = total_comments,
+                  first_cmv_direct_comments = direct_comments,
+                  first_cmv_edited = edited
+                  )
   first_cmv_subs <- inner_join(first_cmv_subs, cmv_lda_doc_top)
   
+  sent_wc_info <- sentiment_by(get_sentences(first_cmv_subs$content))
+  first_cmv_subs <- first_cmv_subs %>%
+    bind_cols(sent_wc_info %>% dplyr::select(word_count, ave_sentiment) %>%
+                rename(cmv_word_count = word_count, cmv_avg_sent = ave_sentiment)
+              )
+  rm(sent_wc_info)
+  
+  # Join with cmv submissions, calc gini coef
   std_subs_info <- inner_join(std_subs %>% mutate(is_cmv_sub = ifelse(subreddit == "r/changemyview", 1, 0)), 
                               sub_auths_min_date) %>%
     filter(date_utc < first_cmv_date,
            # Filter for submissions only younger than . . . 
            abs(first_cmv_date - date_utc) < utc_days_to_ms(max_days_between)) %>%
-    inner_join(by = "author", first_cmv_subs %>% select(author, content, starts_with("topic_"))) %>%
-    filter(author != "[deleted]") %>%
-    group_by(author)
+    inner_join(first_cmv_subs %>% 
+                 select(author, starts_with("topic_"),
+                        deltas_from_author, cmv_word_count, cmv_avg_sent,
+                        starts_with("first_cmv_"),
+                        -first_cmv_date
+                        ),
+               by = "author"
+               ) %>%
+    filter(author != "[deleted]")
   
+  # auth_gini_fp <- glue("pre_model_data/gini_key_db_{max_days_between}.RData")
+  # if (!file.exists(auth_gini_fp)){
+  auth_gini <- sub_auths_min_date$author %>%
+    map_dbl(.f = calc_subred_gini, df = std_subs_info, days_between = max_days_between)
+    # write_rds(auth_gini, auth_gini_fp)
+  # } else {
+   # auth_gini <- read_rds(auth_gini_fp)
+  # }
+  auth_gini <- tibble(author = sub_auths_min_date$author, sr_gini = auth_gini)
+  
+  std_subs_info <- std_subs_info %>%
+    left_join(auth_gini, by = "author")
+  # Get average sentiment and word count for each submission
+  sent_wc_info <- sentiment_by(get_sentences(std_subs_info$content))
+  std_subs_info <- std_subs_info %>% 
+    bind_cols(sent_wc_info %>% dplyr::select(word_count, ave_sentiment)) %>%
+    group_by(author)
+  rm(sent_wc_info)
+
+  # browser()
   std_subs_info <- inner_join(std_subs_info %>%
     summarise(
-      # Stats from non-CMV submission before first CMV Submission  
+      # Stats from non-CMV submissions before first CMV Submission  
       prev_subs = n(),
       prev_unique_subs = length(unique(subreddit)),
       prev_avg_score = mean(score),
@@ -174,17 +280,34 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
       prev_avg_tcoms = mean(total_comments),
       prev_avg_acoms = mean(author_comments),
       prev_avg_score = mean(score),
-      all_text = prep_fun(paste(content.x, content.y, collapse=" ")),
-      sub_text = prep_fun(paste(content.x, collapse=" ")),
-      first_cmv_text = prep_fun(paste(content.y, collapse = " ")),
-      first_cmv_date = mean(first_cmv_date)
-    ),
+      sub_text = prep_fun(paste(content, collapse=" ")),
+      ps_avg_word_count = mean(word_count),
+      ps_avg_sent = mean(ave_sentiment),
+      ps_gini = mean(sr_gini),
+      ps_available = sum(word_count != 0),
+      ps_mean_date = mean(date_utc),
+      
+      
+      # Stats from first CMV Submission
+      first_cmv_op_coms = mean(first_cmv_op_coms),
+      first_cmv_date = mean(first_cmv_date),
+      first_cmv_deltas_from_OP = mean(deltas_from_author),
+      first_cmv_wc = mean(cmv_word_count),
+      first_cmv_sent = mean(cmv_avg_sent),
+      first_cmv_op_coms = mean(first_cmv_op_coms), 
+      first_cmv_total_coms = mean(first_cmv_total_coms),
+      first_cmv_direct_comments = mean(first_cmv_direct_comments),
+      first_cmv_edited = mean(first_cmv_edited)
+      ),
     std_subs_info %>%
       summarise_at(vars(starts_with("topic_")), mean), 
     by = "author"
-    )
+    ) %>%
+    inner_join(first_cmv_subs %>% select(content, author), by = "author") %>%
+    rename(first_cmv_text = content) %>%
+    mutate(all_text = paste(sub_text, prep_fun(first_cmv_text)))
+    # ^ Add in CMV Text info now (had repeats depending on num subs b4)
   
-  # browser()
   ###
   # Create similarity score between author's previous body of work and first
   # CMV Submission
@@ -239,7 +362,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
     mutate(first_person_singular = ifelse(word %in% c("i", "me"), 1, 0),
            first_person_plural = ifelse(word %in% c("we", "us"), 1, 0))
   
-  auth_cmv_text_info <- auth_sub_text_words %>%
+  auth_cmv_text_info <- auth_cmv_text_words %>%
     group_by(author) %>%
     summarise(cmv_n_words = n(),
               cmv_tot_first_person_singular = sum(first_person_singular),
@@ -293,6 +416,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
 create_multiple_model_data <- function(lsa_topic_vals, days_between_vals,
                                        lda_topic_vals){
   require(readr)
+  require(tidyverse)
   require(glue)
   for (ltv in lsa_topic_vals){
     for (dbv in days_between_vals){
@@ -301,13 +425,68 @@ create_multiple_model_data <- function(lsa_topic_vals, days_between_vals,
         
         # LSA makes it take forever, don't remake a file if it's already there.
         if (!file.exists(file_path)){
+          print(glue("{ltv} LSA Topics, {ldatv} LDA Topics, and {dbv} Days does not exist. Creating . . ."))
           process_data(lsa_topics = ltv, max_days_between = dbv,
                        lda_topics = ldatv) %>%
             write_rds(file_path)
+        } else {
+          print(glue("{ltv} LSA Topics, {ldatv} LDA Topics, and {dbv} Days between already exists. Skipping . . ."))
         }
       }
     }
   }
 }
+###
+# Post hoc, fixes
+###
 
-create_multiple_model_data(c(50, 100, 150, 200), c(365, 60, 30, 90, 730), c(4, 5, 6, 7, 8, 9, 10))
+fix_dat <- function(){
+  require(tidyverse)
+  require(purrr)
+  
+  
+  model_data_files <- list.files("model_data/", pattern = "^model_dat_db")
+  days_between <- unique(
+    as.integer(str_extract(model_data_files, "[1234567890]+")))
+  
+  cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs.rds")
+  sub_auths_min_date <- cmv_subs %>%
+    group_by(author) %>%
+    summarise(last_cmv_date = nth_date(date_utc, 1, T),
+              first_cmv_date = nth_date(date_utc, 1, F),
+              second_cmv_date = nth_date(date_utc, 1, F),
+              tot_cmv_subs = n())
+  
+  cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs_raw.rds") %>%
+    left_join(sub_auths_min_date, by = "author")
+  
+  add_rm_cmv_subs <- function(cmv_subs_raw, db){
+    require(glue)
+    rm_cmv_info <- cmv_subs_raw %>%
+      filter((first_cmv_date - date_utc) < db * 86400) %>%
+      mutate(rm = ifelse(content == "[removed]", 1, 0)) %>%
+      group_by(author) %>%
+      summarise(rm_cmv_subs = sum(rm))
+    
+    pat <- glue("model_dat_db_{db}")
+    relevant_files <- list.files("model_data/", pattern = pat)
+    
+    for (f in relevant_files){
+      file_path <- glue("model_data/{f}")
+      read_rds(file_path) %>%
+        inner_join(rm_cmv_info) %>%
+        mutate(gave_delta = ifelse(first_cmv_deltas_from_OP > 0, 1, 0)) %>%
+        write_rds(file_path)
+    }
+  } 
+  
+  days_between %>%
+    walk(~ add_rm_cmv_subs(cmv_subs_raw = cmv_subs, db = .))
+}
+
+if (!interactive()) {
+  create_multiple_model_data(c(100, 50, 150, 200), c(730, 30, 60, 90, 180, 365), c(7, 4, 5, 6, 8, 9, 10))
+  
+  # quickfixes
+  fix_dat()
+}
