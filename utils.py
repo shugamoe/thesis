@@ -71,12 +71,13 @@ def can_fail(praw_call, *args, **kwargs):
             except AssertionError:
                 call_successful = True
             except ServerError: # Also encountered this...
+                print("Encountering 503?")
                 while not call_successful:
                     time.sleep(sleep_time)
                     try:
                         praw_call_result = praw_call(self, *args, **kwargs)
                         call_successful = True
-                    except RequestException:
+                    except ServerError:
                         sleep_time += 60 # Wait another minute longer
 
         if "praw_call_result" not in locals():
