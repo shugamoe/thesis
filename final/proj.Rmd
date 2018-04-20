@@ -4,6 +4,7 @@ author: "Julian McClellan"
 date: "April 1, 2018"
 output: 
   pdf_document:
+    toc: true
     latex_engine: xelatex
     includes:
       in_header:

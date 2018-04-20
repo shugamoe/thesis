@@ -1,10 +1,17 @@
 # Analyze the results of the trained models
 #
 #
+
 library(tidyverse)
 library(ggplot2)
 library(caret)
 library(coefplot)
+
+tfunc <- function(){
+  require(coefplot)
+  require(caret)
+  coefplot(resamples(tres))
+}
 
 get_perplexity <- function(model = F){
   require(readr)

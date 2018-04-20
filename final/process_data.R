@@ -72,11 +72,15 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   require(purrr)
   require(sentimentr)
   
-  dbcon <- src_mysql("jmcclellanDB", 
-                     host="mpcs53001.cs.uchicago.edu",
-                     username="jmcclellan",
-                     password="uderpTh5b"
-  )
+  tryCatch(
+    dbcon <- src_mysql("jmcclellanDB", 
+                       host="mpcs53001.cs.uchicago.edu",
+                       username="jmcclellan",
+                       password="uderpTh5b"
+      ),
+    error = print("Didn't connect to DB")
+    )
+  
   if (dl_data){
     print("Downloading Data")
     cmv_coms <- dbcon %>%
@@ -471,6 +475,7 @@ fix_dat <- function(){
     pat <- glue("model_dat_db_{db}")
     relevant_files <- list.files("model_data/", pattern = pat)
     
+    as.POSIXct(dates_boi, origin = "1970-01-01")
     for (f in relevant_files){
       file_path <- glue("model_data/{f}")
       read_rds(file_path) %>%
