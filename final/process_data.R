@@ -44,7 +44,7 @@ calc_subred_gini <- function(user, df, days_between){
     
     sr_probs <- work_tibble %>%
       group_by(subreddit) %>%
-      summarise(prob = n() / length(sr))
+      dplyr::summarise(prob = n() / length(sr))
     ineq <- ineq(sr_probs$prob, type = "Gini")
     write_rds(list(user = user, ineq = ineq), auth_info_fp)
   } else {
@@ -57,10 +57,10 @@ calc_subred_gini <- function(user, df, days_between){
 ###
 # Main Function. Processes data with given parameters
 ###
-process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
+process_data <- function(lsa_topics = 100,
                          lda_topics = 7,
-                         max_days_between = Inf,
-                         get_second_dat = F
+                         max_days_between = 730,
+                         dl_data = F, raw = F
                          ){
   require(tidyverse)
   require(topicmodels)
@@ -71,12 +71,19 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   require(ineq)
   require(purrr)
   require(sentimentr)
+  require(lubridate)
+  
+  out_fp <- glue("model_data/model_dat_db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}.rds")
+  if (file.exists(out_fp)){
+    print(as.character(glue("Skipping (exists) '{out_fp}'")))
+    return()
+  }
   
   tryCatch(
     dbcon <- src_mysql("jmcclellanDB", 
                        host="mpcs53001.cs.uchicago.edu",
                        username="jmcclellan",
-                       password="uderpTh5b"
+                       password="udaeTh5b"
       ),
     error = print("Didn't connect to DB")
     )
@@ -112,22 +119,32 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   # Want Raw data or do some basic filtering? 
   if (!raw){
     cmv_coms <- cmv_coms %>%
+      mutate(date = as.POSIXct(date_utc, origin = "1970-01-01")) %>%
       filter(content != "[removed]",
-             content != "[deleted]")
+             content != "[deleted]",
+             year(date) == 2016 # Want 2016 Comments only
+             )
     
+    cmv_subs <- cmv_subs %>%
+      mutate(gave_delta = ifelse(deltas_from_author > 0, 1, 0),
+             date = as.POSIXct(date_utc, origin = "1970-01-01")) %>%
+      filter(content != "[removed]",
+             year(date) == 2016 # Want 2016 Submissions Only
+             )
     temp <- seq(from = 1, by = 1, length.out = nrow(cmv_subs %>%
                                                       filter(content != "[removed]")))
     cmv_subs <- cmv_subs %>%
-      mutate(gave_delta = ifelse(deltas_from_author > 0, 1, 0)) %>%
-      filter(content != "[removed]") %>%
       mutate(cmv_sub_ind = 1,
              content = unlist(strsplit(content, "\n\n>"))[temp]
              ) # ^ Remove CMV Moderator Message
     t <- length(unique(cmv_subs$content))
     
     std_subs <- std_subs %>% 
-    filter(content != "[removed]",
-           content != "[deleted]")
+      mutate(date = as.POSIXct(date_utc, origin = "1970-01-01")) %>%
+      filter(content != "[removed]",
+             content != "[deleted]",
+             year(date) <= 2016 # Want Submissions in or prior to 2016
+             )
     raw_add <- ""
   } else {
     raw_add <- "_raw"
@@ -152,7 +169,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   # CMV Sub authors, their earliest CMV Submission, and the number of CMV Subs
   sub_auths_min_date <- cmv_subs %>%
     group_by(author) %>%
-    summarise(last_cmv_date = nth_date(date_utc, 1, T),
+    dplyr::summarise(last_cmv_date = nth_date(date_utc, 1, T),
               first_cmv_date = nth_date(date_utc, 1, F),
               second_cmv_date = nth_date(date_utc, 2, F),
               tot_cmv_subs = n())
@@ -162,7 +179,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   ### 
   # Get a "perplexity" score from "Warp" algo LDA topic model
   ###
-  warp_topic_model_fp <- glue("pre_model_data/warp_topic_model_k_{lda_topics}.RData")
+  warp_topic_model_fp <- glue("pre_model_data/topic_model/warp_k_{lda_topics}.RData")
   if (!file.exists(warp_topic_model_fp)){
     tokens <- cmv_subs$content %>% 
       tolower %>% 
@@ -190,7 +207,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   }
   
   # Now have a topic model for scoring
-  topic_model_fp <- glue("pre_model_data/topic_model_k_{lda_topics}.RData")
+  topic_model_fp <- glue("pre_model_data/topic_model/k_{lda_topics}.RData")
   if (!file.exists(topic_model_fp)){
     cmv_subs_col <- cmv_subs
     
@@ -218,7 +235,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   cmv_lda_doc_top <- tidy(cmv_lda, matrix = "gamma") %>%
     mutate(topic = paste("topic_", topic, sep = "")) %>%
     spread(topic, gamma) %>%
-    rename(reddit_id = document)
+    dplyr::rename(reddit_id = document)
   
   # Filter down to first cmv_subs for each author only, extract sentiment and wc
   first_cmv_subs <- inner_join(sub_auths_min_date, cmv_subs) %>%
@@ -233,7 +250,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   sent_wc_info <- sentiment_by(get_sentences(first_cmv_subs$content))
   first_cmv_subs <- first_cmv_subs %>%
     bind_cols(sent_wc_info %>% dplyr::select(word_count, ave_sentiment) %>%
-                rename(cmv_word_count = word_count, cmv_avg_sent = ave_sentiment)
+                dplyr::rename(cmv_word_count = word_count, cmv_avg_sent = ave_sentiment)
               )
   rm(sent_wc_info)
   
@@ -274,7 +291,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
 
   # browser()
   std_subs_info <- inner_join(std_subs_info %>%
-    summarise(
+    dplyr::summarise(
       # Stats from non-CMV submissions before first CMV Submission  
       prev_subs = n(),
       prev_unique_subs = length(unique(subreddit)),
@@ -304,11 +321,11 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
       first_cmv_edited = mean(first_cmv_edited)
       ),
     std_subs_info %>%
-      summarise_at(vars(starts_with("topic_")), mean), 
+      dplyr::summarise_at(vars(starts_with("topic_")), mean), 
     by = "author"
     ) %>%
     inner_join(first_cmv_subs %>% select(content, author), by = "author") %>%
-    rename(first_cmv_text = content) %>%
+    dplyr::rename(first_cmv_text = content) %>%
     mutate(all_text = paste(sub_text, prep_fun(first_cmv_text)))
     # ^ Add in CMV Text info now (had repeats depending on num subs b4)
   
@@ -353,7 +370,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   
   auth_sub_text_info <- auth_sub_text_words %>%
     group_by(author) %>%
-    summarise(sub_n_words = n(),
+    dplyr::summarise(sub_n_words = n(),
               sub_tot_first_person_singular = sum(first_person_singular),
               sub_tot_first_person_plural = sum(first_person_plural),
               sub_frac_first_person_singular = sub_tot_first_person_singular / sub_n_words,
@@ -368,7 +385,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   
   auth_cmv_text_info <- auth_cmv_text_words %>%
     group_by(author) %>%
-    summarise(cmv_n_words = n(),
+    dplyr::summarise(cmv_n_words = n(),
               cmv_tot_first_person_singular = sum(first_person_singular),
               cmv_tot_first_person_plural = sum(first_person_plural),
               cmv_frac_first_person_singular = cmv_tot_first_person_singular / cmv_n_words,
@@ -395,7 +412,7 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
            lag_time = abs((date_utc - sub_date) / (1000 * 60))
            ) %>% 
     group_by(author) %>%
-    summarise(
+    dplyr::summarise(
               prev_cmv_coms = sum(cmv_com_ind),
               prev_cmv_direct_coms = sum(direct_reply_ind),
               prev_cmv_avg_OP_deltas = mean(deltas_from_OP),
@@ -414,32 +431,19 @@ process_data <- function(dl_data = F, raw = F, lsa_topics = 100,
   
   
   # Return model ready info
+  write_rds(std_subs_info, out_fp)
   std_subs_info
 }
 
-create_multiple_model_data <- function(lsa_topic_vals, days_between_vals,
-                                       lda_topic_vals){
-  require(readr)
-  require(tidyverse)
-  require(glue)
-  for (ltv in lsa_topic_vals){
-    for (dbv in days_between_vals){
-      for (ldatv in lda_topic_vals){
-        file_path <- glue("model_data/model_dat_db_{dbv}_ltv_{ltv}_ldatv_{ldatv}.rds")
-        
-        # LSA makes it take forever, don't remake a file if it's already there.
-        if (!file.exists(file_path)){
-          print(glue("{ltv} LSA Topics, {ldatv} LDA Topics, and {dbv} Days does not exist. Creating . . ."))
-          process_data(lsa_topics = ltv, max_days_between = dbv,
-                       lda_topics = ldatv) %>%
-            write_rds(file_path)
-        } else {
-          print(glue("{ltv} LSA Topics, {ldatv} LDA Topics, and {dbv} Days between already exists. Skipping . . ."))
-        }
-      }
-    }
-  }
+all_process_data <- function(){
+  require(purrr)
+  source("master_vars.R")
+  
+  as.list(expand.grid(lsa_topics = LSA_TOPICS, lda_topics = LDA_TOPICS,
+                      max_days_between = DAYS_BETWEEN)) %>%
+    pwalk(process_data)
 }
+
 ###
 # Post hoc, fixes
 ###
@@ -447,6 +451,7 @@ create_multiple_model_data <- function(lsa_topic_vals, days_between_vals,
 fix_dat <- function(){
   require(tidyverse)
   require(purrr)
+  source("explore_data.R")
   
   
   model_data_files <- list.files("model_data/", pattern = "^model_dat_db")
@@ -455,10 +460,10 @@ fix_dat <- function(){
   
   cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs.rds")
   sub_auths_min_date <- cmv_subs %>%
-    group_by(author) %>%
-    summarise(last_cmv_date = nth_date(date_utc, 1, T),
+    dplyr::group_by(author) %>%
+    dplyr::summarise(last_cmv_date = nth_date(date_utc, 1, T),
               first_cmv_date = nth_date(date_utc, 1, F),
-              second_cmv_date = nth_date(date_utc, 1, F),
+              second_cmv_date = nth_date(date_utc, 2, F),
               tot_cmv_subs = n())
   
   cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs_raw.rds") %>%
@@ -467,20 +472,20 @@ fix_dat <- function(){
   add_rm_cmv_subs <- function(cmv_subs_raw, db){
     require(glue)
     rm_cmv_info <- cmv_subs_raw %>%
-      filter((first_cmv_date - date_utc) < db * 86400) %>%
-      mutate(rm = ifelse(content == "[removed]", 1, 0)) %>%
-      group_by(author) %>%
-      summarise(rm_cmv_subs = sum(rm))
+      dplyr::filter((first_cmv_date - date_utc) < db * 86400) %>%
+      dplyr::mutate(rm = ifelse(content == "[removed]", 1, 0)) %>%
+      dplyr::group_by(author) %>%
+      dplyr::summarise(rm_cmv_subs = sum(rm))
     
     pat <- glue("model_dat_db_{db}")
     relevant_files <- list.files("model_data/", pattern = pat)
     
-    as.POSIXct(dates_boi, origin = "1970-01-01")
     for (f in relevant_files){
       file_path <- glue("model_data/{f}")
       read_rds(file_path) %>%
         inner_join(rm_cmv_info) %>%
-        mutate(gave_delta = ifelse(first_cmv_deltas_from_OP > 0, 1, 0)) %>%
+        dplyr::mutate(gave_delta = ifelse(first_cmv_deltas_from_OP > 0, 1, 0)) %>%
+        left_join(MOD_TIB, by = c("author" = "mod_name")) %>%
         write_rds(file_path)
     }
   } 
@@ -490,8 +495,7 @@ fix_dat <- function(){
 }
 
 if (!interactive()) {
-  create_multiple_model_data(c(100, 50, 150, 200), c(730, 30, 60, 90, 180, 365), c(7, 4, 5, 6, 8, 9, 10))
-  
+  all_process_data()
   # quickfixes
   fix_dat()
 }
