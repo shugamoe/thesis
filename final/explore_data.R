@@ -111,7 +111,7 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
   require(glue)
   
   out_fp <- glue("exploration_objects/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}.rds") 
-  if (!file.exists(out_fp)){
+  if (file.exists(out_fp)){
     print(as.character(glue("Skipping (exists) '{out_fp}'")))
     return()
   }
@@ -142,6 +142,32 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
   tables$top_words <- warp_k_lda$get_top_words()
   tables$stargazer_fp <- as.character(stargazer_output_fp)
   
+  net_change <- cmv_subs %>%
+    group_by(date) %>%
+    dplyr::summarise(n = n(),
+                     change = sum(opinion_change),
+                     net_change = change - (n - change)
+                     ) %>%
+    mutate(negative)
+  
+  net_change_first <- cmv_subs %>%
+    filter(auth_first == T) %>%
+    group_by(date) %>%
+    dplyr::summarise(n = n(),
+                     change = sum(opinion_change),
+                     net_change = change - (n - change)
+                     )
+  
+  # Plot of Net Opinion Change Overall
+  plots$all_net_change <- net_change %>%
+    ggplot(aes(x = date, y = net_change)) +
+      geom_line()
+  
+  # Plot of Net Opinion Change Overall
+  plots$first_net_change <- net_change %>%
+    ggplot(aes(x = date, y = net_change)) +
+      geom_line()
+  
   # Plot of all CMV Submission Activity over Time, by opinion change
   plots$all_activity <- cmv_subs %>%
     ggplot(aes(x = date, group = opinion_change, fill = opinion_change)) +
@@ -159,7 +185,8 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
       geom_density(position = "stack", aes(y = ..count..), bw = 30/60)
   
   first_only <- cmv_subs %>%
-    filter(auth_first == T, is.na(is_mod))
+    filter(auth_first == T) %>%
+    filter_at(vars(ends_with(".x")), any_vars(is.na(.)))
   
   # Previous Sub density
   plots$prev_subs_density <- first_only %>%
@@ -218,7 +245,7 @@ all_explore_data <- function(){
  
 if (interactive()){
   cmv_subs <- get_cmv_subs()
-  plots <- create_figs_tabs()
+  plots <- explore_data()
   k_lda <- get_k_lda()
   
   coff_key <- find_cmv_date_cutoffs()
