@@ -28,6 +28,9 @@ self-affirmation,  is utilized as a means of classing similar users.
 
 # Introduction
 
+# Data
+
+## Overview of Data Source: r/ChangeMyView
 
 The popular social media site, Reddit, is composed of a variety of subcommunities, or "subreddits". One such subreddit, r/ChangeMyView (CMV):
 
@@ -74,6 +77,263 @@ explored in CMV, but one that leverages the open nature of Reddit user histories
 
 > "Using what we know about a user who submits a view to CMV, can we predict if they will
 change their opinion?"
+
+## Exploring the Data Used
+
+```{r, echo=FALSE, message=FALSE, results='hide'}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+source("explore_data.R")
+
+expl <- explore_data()
+
+pretty_percent <- function(float){
+  require(glue)
+  float <- signif(float, digits = 3)
+  (as.character(glue("{float}%")))
+}
+```
+
+Firstly, in order to answer this question, opinions must be gathered. Because
+Reddit submissions are "archived", i.e. made immutable, once they are 6 months old
+I look at the opinion submissions posted to CMV in 2016, and the authors of
+these submissions. While there is no doubt that 2016 opinion submissions fit
+into and contain distinct time series patterns for many of the covariates I
+analyze, I make a tradeoff between "all" archived CMV submisions (2013 to today - 6 months) and too few. In
+choosing a year's worth of *relatively* recent data, I aim to average over fewer
+distinct times trends, maintain statistical power, and to counteract the
+remaining possibility, for older archived submissions, that a Reddit users
+deletes or edits their submissions. Because this study aims to gather
+information on Reddit user's partially through their submission history,
+deletions and edits create introduce anomalies in the data that are difficult to
+counteract. Deletions are a missing data problem with no practical imputation solutions,
+and while one can tell whether a submission is edited, there is no way to reliably
+count the number of edits or discern the changes made. Additionally, a number of
+older significant CMV submissions are authored by "[deleted]", i.e. an unknown
+author. A Reddit user can delete there account, and henceforth all of their submissions
+will appear to be authored by "[deleted]".
+
+Due to the risk of account deletion teogether with submission alteration and/or deletion,
+the time at which data is important to note, as later versions of the same Reddit content
+may very well be different from their earlier versions. Starting February 19th, 2018, I 
+utilized PRAW, The Python Reddit API Wrapper, with a MySQL database to begin
+scraping data from CMV opinion submissions from 2016. All the content of these
+opinion submissions were gathered. In the vast majority of cases in which an opinion
+submission author could be identified, of the submissions the author made before
+the time of the scraping were also gathered. On February 28th the data was backed
+up and ready to process. To reiterate generally, 2 major sources of data were gathered:
+
+  * All CMV opinion submissions and their content
+  * All available CMV authors' submission histories
+    + Comments to these submissions were not tracked.
+
+In 2016, `r nrow(expl$cmv_subs)` opinion submissions were recorded in CMV. Of
+these, `r pretty_percent(sum(expl$cmv_subs$gave_delta) / nrow(expl$cmv_subs))`
+of these opinions are recorded as having changed by their OP. Below are figures
+detailing day-by-day and hour-to-hour opinion submission activity by their resulting change in opinion,
+or lack thereof.
+
+```{r}
+require(lubridate)
+(
+  expl$plots$all_activity + 
+   labs(title = "2016 CMV Submission Activity",
+        subtitle = "by opinion change status",
+     fill = "Opinion Change?") + 
+    geom_vline(aes(xintercept = as.numeric(ymd("20161108"))),
+               linetype = 1, color = "gray") + 
+  geom_text(mapping=aes(x=ymd("20161108"), y=0, label="2016 Election"), size=4, angle=90, vjust=-0.4, hjust=-2.2)
+ )
+
+(
+  expl$plots$day_activity +
+    labs(title = "2016 CMV Submission Activity by Hour",
+         subtitle = "24 Hours | UTC",
+         x = "Hour of the Day",
+         fill = "Opinion Change?"
+         )
+)
+```
+
+`r sum(expl$cmv_subs$auth_first)` 2016 opinion submission were made by first
+time authors. Indeed, first time authors with submission history are the subjects of interest in
+this study (hereafter: subject authors). After all, without some sort of prior
+Reddit participation, there is very little information to discern from subject
+authors. There are many that have at least 1 prior submission in a subreddit
+other than r/ChangeMyView, and some even have hundreds of prior submissions. Of
+course, some submissions are older, relative to that author's first CMV opinion,
+than others. Should a submission from 2013 be taken into account for it's potential
+effect on a CMV opinion given in 2016? Deciding on a cutoff, if to have one at all introduces another
+tradeoff, one the one hand, a shorter cutoff, say only including the last 30 days 
+worth of submissions before a subject author's first CMV opinion allows only the recent, and 
+perhaps most relevant information of that author to be taken into account. However,
+a short cutoff also precludes more subject authors from study, given the higher bar
+on activity demanded from the cutoff. A longer cutoff, or not having a cutoff at all
+includes more subject authors in the study, with all possible information, but
+information gleaned from older submissions might be "noise" to our model that
+attempts to predict whether the further off opinion changes or not.
+
+In light of these tradeoffs (which are heuristics at best), I begin by including
+only submission histories that are no more than 1 year older than a CMV author's
+first CMV opinion. If an author does not have submission history within one year
+of their first CMV opinion, they are not counted as subject authors. Given this criteria,
+`r nrow(expl$model_dat)` (`r pretty_percent(nrow(expl$model_dat) / sum(expl$cmv_subs$auth_first))`),
+viable subject authors are available for study. A density figure of the number of submission prior to a subject
+author's first CMV submission is given below.
+
+```{r}
+median_prev_sub <- median(expl$model_dat$`(AH) # Submissions within 1 years before 1st CMV Post`)
+
+(
+ expl$plots$prev_subs_density + 
+   labs(title = "Subject Author Submissions Prior to First CMV Opinion",
+        subtitle = glue("Within 1 year of 1st Opinion | Median ({median_prev_sub}) Marked"),
+        x = "Previous Submissions") +
+    geom_vline(aes(xintercept = median_prev_sub), linetype = 3)
+)
+```
+
+Accordingly then, from my two major sources of data, 2016 CMV opinions, and the
+submission histories of their author's I have narrowed down my scope of inquiry
+to the opinions and submission histories of the subject authors. These subject authors
+are those Reddit users who have:
+  
+  1. Submitted their first opinion to CMV in 2016
+  2. Have at least 1 Submission within a year before their first CMV opinion.
+  
+With the specific population of interest specified, features can be constructed and
+categorized to provide the best attempt at predicting whether subject authors' opinions
+changed.
+
+# Methodology
+
+## Features
+
+I construct three distinct groups of features to utilize in my model. . .
+  * Author History (AH)
+  * Pre Debate
+  * Post Debate
+  
+### Author History
+
+As the title suggests, this group of features focuses on the subject author's submission
+history.
+
+#### Submissions within 1 year before 1st CMV Post
+
+As alluded to above, this feature is a simple count of the subject author's submissions
+within a year before his or her first CMV Post. Since all the submissions included
+in this feature are subreddits that are *not* CMV, it fits nicely within self-affirmation's conception
+of success in an unrelated field, especially when paired with other author history
+features like "Mean Submission Score".
+
+#### Unique Subreddits Posted In
+
+For the subject author's submission history, this counts how many distinct subreddits
+the author participated in before posting to CMV.
+
+#### Average Previous Submission Date
+
+This feature seeks to establish the chronological "center" of the subject
+author's submission history.
+
+#### Edits Per Previous Submission
+
+If a subject author edits one of their previous post, any number of times, this
+can be tracked with the Reddit API. Edits occur for a variety of reasons, and may
+help indicate a user's responsiveness to comments on their submissions. For CMV
+submission this is usually the case, so I track previous, potentially similarly
+motivated behavior with this feature.
+
+#### Fraction Plural First Person Pronouns
+#### Fraction Singular First Person Pronouns
+#### Mean Plural First Person Pronouns
+#### Mean Singular First Person Pronouns
+
+@tan2016winning found:
+
+> First person pronouns are strong indicators of malleability, but first person
+plural pronouns correlate with resistance. . . individualizing
+one’s relationship with a belief using first person pronouns
+affirms the self, while first person plurals can indicate a diluted
+sense of group responsibility for the view
+
+In light of this, I have included a number of features concerning plural and
+singular first person pronouns, with the mean based ones being more sensitive to
+submission length (and thus, in many cases, quality), and the fraction based features
+being agnostic to the number of submissions and their length.
+
+#### Mean # of Words
+
+This feature serves as a proxy for mean prior submission quality, and is also
+included to calculate first person pronoun fractions.
+
+#### Mean Previous Submission Sentiment
+
+Utilizing the R package "sentimentr" I calculate a negative-positive (-1 to 1)
+sentiment score and take the average across the subject author's previous
+submissions.
+
+#### Mean Submission Score
+
+This is simply the average of all the subject author's previous submissions. While
+Reddit upvote/score manipulation is impossible to rule out, this helps to delineate
+the "success" of self-affirmation provided by the submissions.
+
+#### Removed CMV Subs 1 Year before 1st CMV Post
+
+This feature counts the subject author's previous "unsuccessful" earlier attempts
+at posting to r/ChangeMyView. CMV posts counted in this feature are those that
+are removed for some violation of the rules of the subreddit. Given the self-selective
+nature of CMV participants, unsucessful earlier integration into the community
+as measured through removed CMV posts could be an important feature to keep track
+of.
+
+#### Submissions with Content 1 Year before 1st CMV Post
+
+Not all submissions are created equal, at least compared to the higher quality
+discussion and opinion explanations found on CMV. This feature counts the number
+of subject author submissions that actually have textual content beyond, say, a
+hyperlink.
+
+#### Subreddit Gini Index
+
+This feature is a measure of subreddit submission inequality. This feature helps
+to differentiate between subject author's who focused a lot of their submissions
+in a few subreddits versus those who diversified the subreddits they posted
+submissions in.
+
+### Pre Debate
+
+This features are based on the subject author's first opinion submitted to CMV,
+but utilizing information that could only be gleaned at the time of the submission,
+before any debate initiated by other user's could take place. Together with the
+Author History features, these groups comprise the main thrust of the study, to
+test the predictive capability of subject author information from their history 
+and from their opinion on opinion malleability.
+
+#### # Words
+
+Counts the number of words contained within the CMV Submission.
+
+#### CMV Submission Date
+
+Tracks the date the subject author submitted their first opinion to CMV. (UTC Epoch)
+
+#### CMV Submission Hour
+
+Tracks the hour of the day the opinion was posted. (UTC 24 hours)
+
+#### Fraction Plural First Person Pronouns
+#### Fraction Singular First Person Pronouns
+#### Total Plural First Person Pronouns
+#### Total Singular First Person Pronouns
+
+  
+
+### Final Processing
+
+
+
 
 Using submissions and author histroy scraped from CMV activity in 2016, I construct several
 relevant features to help predict an opinion change/delta awarding. Like Tan et al. I utilize

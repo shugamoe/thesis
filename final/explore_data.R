@@ -1,5 +1,6 @@
 # Data Exploration for Thesis
 
+source("master_vars.R")
 source("process_data.R")
 source("train_model.R")
 
@@ -76,6 +77,7 @@ get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
              date = as_date(posix),
              dtime = as_datetime(date),
              tod = hour(posix) + minute(posix) / 60,
+             hour = hour(posix),
              fill = 1,
              opinion_change = ifelse(deltas_from_author > 0, T, F)
              ) %>%
@@ -97,18 +99,20 @@ get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
   model_dat <- read_data(lsa_topics, lda_topics, max_days_between)
   
   cmv_subs <- cmv_subs %>%
-    inner_join(model_dat %>% select(-first_cmv_date), by = "author")
+    left_join(model_dat %>% select(-first_cmv_date), by = "author") %>%
+    mutate(gave_delta = ifelse(deltas_from_author > 0, 1, 0))
   
   cmv_subs
 }
 
-explore_data <- function(lsa_topics = 100, lda_topics = 7,
-                              max_days_between = 730){
+explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
+                              max_days_between = CHOICE_DB){
   require(tidyverse)
   require(ggplot2)
   require(lubridate)
   require(scales)
   require(glue)
+  require(stargazer)
   
   out_fp <- glue("exploration_objects/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}.rds") 
   if (file.exists(out_fp)){
@@ -119,11 +123,13 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
   theme_set(theme_minimal())
   cmv_subs <- get_cmv_subs(lsa_topics, lda_topics, max_days_between)
   
-  model_dat <- read_data(lsa_topics, lda_topics, max_days_between) %>%
+  model_dat_dirty <- read_data(lsa_topics, lda_topics, max_days_between) %>%
     mutate(first_cmv_date = as.POSIXct(first_cmv_date, origin = "1970-01-01"),
            ps_mean_date = as.POSIXct(ps_mean_date, origin = "1970-01-01")
            ) %>%
-    revamp_cols(max_days_between) %>%
+    revamp_cols(max_days_between)
+    
+  model_dat <- model_dat_dirty %>%
     dplyr::select(starts_with("("))
     
   all <- list()
@@ -147,8 +153,14 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
     dplyr::summarise(n = n(),
                      change = sum(opinion_change),
                      net_change = change - (n - change)
-                     ) %>%
-    mutate(negative)
+                     )
+  
+  net_change_tod <- cmv_subs %>%
+    group_by(hour) %>%
+    dplyr::summarise(n = n(),
+                     change = sum(opinion_change),
+                     net_change = change - (n - change)
+                     )
   
   net_change_first <- cmv_subs %>%
     filter(auth_first == T) %>%
@@ -163,9 +175,8 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
     ggplot(aes(x = date, y = net_change)) +
       geom_line()
   
-  # Plot of Net Opinion Change Overall
-  plots$first_net_change <- net_change %>%
-    ggplot(aes(x = date, y = net_change)) +
+  plots$all_tod_net_change <- net_change_tod %>%
+    ggplot(aes(x = hour, y = net_change)) + 
       geom_line()
   
   # Plot of all CMV Submission Activity over Time, by opinion change
@@ -184,12 +195,21 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
     ggplot(aes(x = tod, group = opinion_change, fill = opinion_change)) +
       geom_density(position = "stack", aes(y = ..count..), bw = 30/60)
   
+  plots$coms_by_hour <- cmv_subs %>%
+    group_by(hour) %>%
+    summarise(adr = mean(direct_comments),
+              n = n()
+              ) %>%
+    ggplot(aes(x = hour, y = adr)) +
+      geom_line()
+    
+  
   first_only <- cmv_subs %>%
     filter(auth_first == T) %>%
     filter_at(vars(ends_with(".x")), any_vars(is.na(.)))
   
   # Previous Sub density
-  plots$prev_subs_density <- first_only %>%
+  plots$prev_subs_density <- model_dat_dirty %>%
     ggplot(aes(x = prev_subs)) + 
       geom_density(aes(y = ..count..))
   
@@ -211,6 +231,13 @@ explore_data <- function(lsa_topics = 100, lda_topics = 7,
   
   all$plots <- plots
   all$tables <- tables
+  all$cmv_subs <- cmv_subs
+  all$model_dat <- model_dat_dirty
+  
+  info <- list(lsa_topics = lsa_topics, lda_topics = lda_topics,
+               max_days_between = max_days_between
+               )
+  all$info <- info
   all
 }
 
@@ -243,10 +270,10 @@ all_explore_data <- function(){
     pwalk(explore_data)
 }
  
-if (interactive()){
-  cmv_subs <- get_cmv_subs()
-  plots <- explore_data()
-  k_lda <- get_k_lda()
-  
-  coff_key <- find_cmv_date_cutoffs()
-}
+# if (interactive()){
+#   cmv_subs <- get_cmv_subs()
+#   plots <- explore_data()
+#   k_lda <- get_k_lda()
+#   
+#   coff_key <- find_cmv_date_cutoffs()
+# }

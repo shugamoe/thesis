@@ -64,14 +64,17 @@ revamp_cols <- function(model_dat, days_between = 730){
     new_name <- as.character(glue("(Pre Debate) Topic {num} Score"))
   }
   
-  model_dat %>%
-    mutate(gave_delta = factor(gave_delta, labels = c("Stable", "Changed"))) %>%
-    dplyr::rename(
+  model_dat <- model_dat %>%
+    mutate(gave_delta = factor(gave_delta, labels = c("Stable", "Changed")),
+           hour = hour(as.POSIXct(first_cmv_date, origin = "1970-01-01"))
+           ) %>%
+    dplyr::mutate(
       `(Post Debate) # OP Comments` = first_cmv_op_coms,
       `(Post Debate) # Direct Comments` = first_cmv_direct_comments,
       `(Post Debate) # Total Comments` = first_cmv_total_coms,
       `(Post Debate) Opinion Change?` = gave_delta, # Dependent Var
       `(Pre Debate) CMV Submission Date`  = first_cmv_date, 
+      `(Pre Debate) CMV Submission Hour` = hour,
       `(Pre Debate) Total Plural FP Pronouns`  = cmv_tot_first_person_plural, 
       `(Pre Debate) Fraction Plural FP Pronouns` = cmv_frac_first_person_plural ,
       `(Pre Debate) Total Singular FP Pronouns`  = cmv_tot_first_person_singular,
@@ -79,9 +82,9 @@ revamp_cols <- function(model_dat, days_between = 730){
       `(Pre Debate) # Words` = first_cmv_wc, # Base
       `(Pre Debate) Sentiment` = first_cmv_sent,
       `(Pre Debate) Similarity Score` = sim_scores,
-      `(Pre Debate) # Previous CMV Comments` = prev_cmv_coms,
-      `(Pre Debate) Mean Previous Deltas Received` = prev_cmv_avg_OP_deltas,
-      `(Pre Debate) Mean Previous CMV Comment Lag (Minutes)` = prev_cmv_com_avg_lag,
+      # `(Pre Debate) # Previous CMV Comments` = prev_cmv_coms,
+      # `(Pre Debate) Mean Previous Deltas Received` = prev_cmv_avg_OP_deltas,
+      # `(Pre Debate) Mean Previous CMV Comment Lag (Minutes)` = prev_cmv_com_avg_lag,
       !!subs_in_days_bw_name := prev_subs,
       `(AH) Edits Per Previous Submission` = prev_avg_edits,
       `(AH) # Unique Subreddits Posted In` = prev_unique_subs,
@@ -99,6 +102,8 @@ revamp_cols <- function(model_dat, days_between = 730){
     ) %>%
     dplyr::rename_at(dplyr::vars(starts_with("topic_")), add_topic_name) %>%
     dplyr::filter(is.na(is_mod.x)) # Removes moderator submissions
+    model_dat <- model_dat[,order(colnames(model_dat))]
+    (model_dat)
 }
 
 

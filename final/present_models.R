@@ -18,11 +18,12 @@ read_models <- function(lsa_topics = 100, lda_topics = 7, max_days_between = 730
   (read_rds(models_fp)) 
 }
 
-present_models <- function(lsa_topics = 100, lda_topics = 7, days_between = 730,
-                           num_folds, num_repeats){
+present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max_days_between = CHOICE_DB,
+                           num_folds = K, num_repeats = REPEATS){
   require(tidyverse)
   require(coefplot)
   require(caret)
+  require(glue)
   
   out_fp <- glue("figs/result_plots/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}.rds")
   if (file.exists(out_fp)){
@@ -31,7 +32,7 @@ present_models <- function(lsa_topics = 100, lda_topics = 7, days_between = 730,
   }
   result_plots <- list()
   
-  model_list <- read_models(lsa_topic, lda_topic, days_between)
+  model_list <- read_models(lsa_topics, lda_topics, max_days_between)
   
   
   result_plots$roc <- dotplot(resamples(model_list), # metric = c("ROC", "Sens", "Spec"),
