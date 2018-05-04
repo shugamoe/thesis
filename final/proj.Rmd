@@ -1,5 +1,5 @@
 ---
-title: "Persuasion Susceptibility in r/ChangeMyView | An Exploration of Self-Affirmation, Reciprocation, and other Historical Information"
+title: "Opinion Malleability in r/ChangeMyView | An Exploration of Self-Affirmation other Historical Information"
 author: "Julian McClellan"
 date: "April 1, 2018"
 output: 
@@ -208,10 +208,60 @@ changed.
 
 ## Features
 
-I construct three distinct groups of features to utilize in my model. . .
+I construct three distinct groups of features to utilize in my models. . .
+
   * Author History (AH)
   * Pre Debate
   * Post Debate
+  
+For a complete overview of every feature, please see the appendix.
+
+## Model Selection, Comparison, and Performance Evaluation
+
+Given one of the more quixotic aspects of this study, that is, the prediction of
+the opinion malleability of individuals on the internet, the choice of model(s)
+to use, different iterations of these models to compare, and how to evaluate
+their importance are issues that must be addressed. The 3 groups of features I 
+utilize are divisible into two categories. Author history and pre debate features,
+if utilized as a model's only features, makes for a true *prediction* task because
+it aims to utilize information that only is available in the intermittent period
+between when a subject author posts their opinion and when other Reddit users begin 
+attempting to change the view; these are "pre persuasion features". While I do not 
+utilize such a model in any sort of causal framework, by focusing on pre
+persuasion features attempting to predict a post persuasion outcome, the
+temporality of cause and effect, at least, is respected, placing confidence in
+the model perhaps a hair above the oft-quoted notion of "correlation does not
+imply causation". Utilizing the two groups of pre persuasion features and the
+post debate (post persuasion features), which  utilize features which
+potentially capture information available after the outcome variable is fixed,
+does not respect the temporality of cause and effect, but is useful as a benchmark 
+to compare against the pre persuasion based model.
+
+That being said, I plan to utilize models that:
+
+  1. (Base) Utilize a single nominal feature as a base of comparison.
+  2. (Pre) Utilize soley pre persuasion features (Pre Debate and Author History).
+  3. (Full) Utilize pre and post persuasion features .
+  
+My model of interest, however, will be the pre persuasion model, and comparing
+it's performance and the roles of its component features against the base and
+full model. As one may expect however, the using only pre persuasion features
+disregards a great deal of useful intra and post debate information. Thankfully
+my main goal is not eking out model performance in a straightforward
+classification task (a model where the *prediction* aspect does not respect
+temporality). As such, I do not utilize less interpretable boosted or bagging
+models, but opt for a simple logistic regression model. With this model, I can 
+measure the roles of my features within the easily understandable log odds, where 
+I can at least have the notions of significance and log odds, which for this study
+are preferable to something like "variable importance", where concepts of power
+are almost impossible to perceive. Differentiating significant effects between less
+influential variables is practically impossible with variable importance.
+
+Besides comparing 95% CIs for log odds between the three models, I also utilize 
+standard model performance metrics of the receiver operating characteristic
+curve (ROC), as well as sensitivity and specificity. 95% bootstrap CIs for each
+of these three statistics are calculated using 20 reptitions of 10-fold
+cross-validation, for each of the models.
   
 ### Author History
 
@@ -328,12 +378,174 @@ Tracks the hour of the day the opinion was posted. (UTC 24 hours)
 #### Total Plural First Person Pronouns
 #### Total Singular First Person Pronouns
 
+These features track the fraction and totals of first person plural and singular
+pronouns of the subject author's first CMV Post.
+
+#### Sentiment
+
+Utilizing the R package "sentimentr" I calculate a negative-positive (-1 to 1)
+sentiment score of the subject author's first CMV Post.
+
+#### Similarity Score
+
+This features represents the similarity between two documents:
+  (1) The subject author's previous submissions within a year before their first opinion post.
+  (2) The subject author's first opinion post.
   
+Utilizing the R package "text2vec", I calculate a score between -1 to 1 (least
+to most similar). This feature aims to serve as a proxy for how "unrelated" the
+subject author's previous submission content compared to their first opinion on CMV.
+Given the generally open nature of Reddit user submission histories, this feature
+helps exploit the opportunity to study self-affirmation in an online context.
 
-### Final Processing
+#### Topic {K} Score
 
+Before the debate surrounding a CMV submission occurs, the reasoning supporting
+a given opinion is available to browse. The subject matter of the reasoning and
+opinions varies widely. Accordingly a Latent Dirichlet Allocation (LDA) topic model is
+applied to *all* CMV opinion submissions in 2016, excluding those submissions whose
+content is unavailable (removed or deleted posts), and meta-subreddit announcement
+and discussion posts. Using the LDA topic model, the subject author's first opinion
+submissions are scored on K given topics ($$sum_{i=1}^{K}topic\_score_i=1$$). These
+score features are used to model the differing subject matter within the CMV 2016 submissions
+and how the subject author's first opinions fit into such a model.
 
+### Post Debate
 
+After the debate surrounding a CMV post has taken place, a variety of further
+information can be gleaned from the contents comprising the debate, and in some
+cases, moderation. In this study, the Post Debate variables only include the outcome
+of interest and a few other variables that are included in a  model that
+serves to benchmark the effectiveness of Pre Debate + Author History model. For 
+a more thorough examination of "Post Debate" and debate dynamics in general in 
+CMV, please see (@tan2016winning).
+
+#### Opinion Change?
+
+This is the outcome of interest for the study. This feature tracks whether the 
+subject author awarded at least 1 delta in their submission, indicating that the
+subject author changed their opinion.
+
+As alluded to previously, it is possible for comments on an CMV opinion to be 
+awarded deltas from Reddit users besides the subject author. Presumedly, Redditors
+who awarded such deltas share at the general opinion that the subject author has,
+but because these deltas are relatively rare and there is no mechanism to glean
+these Redditors' reasonings why they hold the opinion, such deltas are not taken
+into account.
+  
+#### # Direct Comments
+
+Direct comments are those Reddit comments whose "parent" is the subject author
+opinion submission. In other words, these are the comments directly attempting to
+change the opinion. In general, the number of direct comments to a CMV Post is a
+reliable indicator of the level of debate that occurred. Including such a feature
+in a model helps it to differentiate posts that may have not received a delta due
+to low debate activity.
+
+#### # OP Comments
+
+This feature simply tracks how many comments the subject author, as the original
+poster (OP) of their opinion submission, submitted during the discourse. Inclusion
+in a model helps to determine the role subject author participation played in the
+malleability of an opinion.
+
+#### # Total Comments
+
+This includes all the comments on the subject author's submission. These
+comments may reply to other comments attempting to change the subject author's,
+besides direct comments and OP comments, this feature also captures comments whose
+parent is not the opinion submission itself. These comments reply to other comments,
+whether they be direct comments, OP comments, or arbitrarily nested comments in a 
+comment tree. This feature helps to flesh out the "debates within the debates" that
+take place in a CMV post.
+
+## Feature Engineering Practices
+
+I mentioned that I have constrained the scope of the subject authors' submission
+history. Facing a number  of tradeoffs surrounding relevancy and abundance, I
+have elected to only include subject author submissions within a year before
+their first CMV post. This choice not only has effect on the number of viable
+subject authors, but also on any variable that utilizes the subject author's
+submission history. Conceivably, this choice of cutoff has effects on the
+performance and statistical significance of the features in the model. There are
+also other features that rely on certain parameters, resulting in either
+numerically distinct features, or even different numbers of related features. Thus,
+these choices guarantee a thousands of combinations of potential model-ready data,
+and some judgement must be exercised in selecting these parameters.
+
+### Choosing # of Topics for CMV Submission Topic Model
+
+Besides submission history cutoff, choosing K topics for a Latent Direchlet
+Allocation (LDA) topic model is the 2nd such parameter that must be dealt with. This
+LDA topic model is applied to all CMV opinions submitted in 2016. With this model fitted,
+the subject author's first CMV opinions are given `K` topic scores summing to 1, in order to
+see, generally, how their subject matter fits within 2016. Determining a suitable `K` is
+important to effectively differentiate subject author's first opinions on the basis of 
+subject matter.
+
+In that case, how should one determine `K`? A number of heuristic methods exist
+for this  task. Some involve using certain information criterion measures to
+find an "elbow", i.e. a place where the marginal information gained with an
+increase in `K` drops steeply. Other on  visual comparison using PCA and
+judgement of most common words associated with the topics modeled. In this study,
+I look at both the reduction in "perplexity", a measure of how well a
+probability distribution or model predicts a sample, as well as a visual and
+topical inspection of the data.
+
+```{r display_perp}
+source("present_models.R")
+
+# k8 <- get_k_lda()
+(perp_gg <- display_perp() + 
+    labs(title = "Marginal Reduction in Perplexity",
+         subtitle = "(Lower Perplexity = Better)",
+         y = "Perplexity Reduction",
+         x = "Perplexity Increased To"
+         ))
+```
+
+Often, when using soemthing like Akaike information criterion (AIC) or 
+Bayesian information criterion (BIC), graphs like the one above will be
+monotonically decreasing. Using perplexity, this is not the case, as one can
+clearly see marginal reductions exhibiting non-monotonic behavior. This
+non-monotonic behavior, while making it impossible to have an identifiable "elbow"
+in the graph, does point towards `K=8` or `K=9` topics as potentially viable, but increasing
+`K` to 10 topics still results in relatively large perplexity reductions. Turning
+to a visual inspection helps to differentiate `K=9` and `K=10`.
+
+![K=10 LDA Topics](figs/k_10.png) 
+![K=9 LDA Topics](figs/k_9.png) 
+
+The above two figures are taken from interactive plots available to LDA topic
+models made with the "text2vec" package. In this case, I focus on the left
+section, the intertopic distance map, which projects the topics using PCA onto
+two dimensions, with size indicating marginal topic distribution. Immediately
+noticeable is the relative lack of overlap between different topics under `K=9` compared
+to `K=10`. Even with the caveat that dimension reduction/projection cannot
+completely represent topic overlap/separation, comparing these two
+visualizations makes `K=9` more amenable to my purpose of topic differentiation. 
+Even compared to $K=4. . . 8$, `K=9` displays better visual separation between
+topics. A table of the top 10 words comprising each topic is given below. Note that
+topic 3 seems to be a very generalized topic, as its top words are common URL prefixes,
+nubmers, and very common words. The rest of the topics seem to fall into distinguishiable categories.
+
+```{r topic_table}
+knitr::kable(expl$tables$top_words)
+```
+
+#### Choosing # Topics for Submission History and CMV Opinion Similarity
+
+One of the Pre Debate features is a similarity score between the subject author's
+first CMV opinion and their included submission history. I choose to model similarity
+using cosine similarity with a Latent Semantic Analysis (LSA) topic model. The
+LSA model is first trained upon all subject authors' included submission history with
+`J` topics. Then, cosine similarity between each individual subject author's body of
+prior work and their first CMV opinion is calculated, ranging from -1 (least similar), to
+1 (most similar). However, in this case, unable to find heuristics to choose `J` I
+
+```{r sim_score_density}
+expl$plots$sim_score_density
+```
 
 Using submissions and author histroy scraped from CMV activity in 2016, I construct several
 relevant features to help predict an opinion change/delta awarding. Like Tan et al. I utilize

@@ -57,6 +57,7 @@ MOD_TIB <- fix_mod_tib()
 get_k_lda <- function(lda_topics = 7){
   require(readr)
   require(topicmodels)
+  require(glue)
   
   (cmv_lda <- read_rds(
     glue("pre_model_data/topic_model/warp_k_{lda_topics}.RData"))$lda_mod)
@@ -124,7 +125,7 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   cmv_subs <- get_cmv_subs(lsa_topics, lda_topics, max_days_between)
   
   model_dat_dirty <- read_data(lsa_topics, lda_topics, max_days_between) %>%
-    mutate(first_cmv_date = as.POSIXct(first_cmv_date, origin = "1970-01-01"),
+    dplyr::mutate(first_cmv_date = as.POSIXct(first_cmv_date, origin = "1970-01-01"),
            ps_mean_date = as.POSIXct(ps_mean_date, origin = "1970-01-01")
            ) %>%
     revamp_cols(max_days_between)
@@ -145,26 +146,27 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   
   # Extract top 10 words from given # of lda topics
   warp_k_lda <- get_k_lda(lda_topics)
-  tables$top_words <- warp_k_lda$get_top_words()
+  tables$top_words <- as_tibble(warp_k_lda$get_top_words())
+  names(tables$top_words) <- 1:lda_topics
   tables$stargazer_fp <- as.character(stargazer_output_fp)
   
   net_change <- cmv_subs %>%
-    group_by(date) %>%
+    dplyr::group_by(date) %>%
     dplyr::summarise(n = n(),
                      change = sum(opinion_change),
                      net_change = change - (n - change)
                      )
   
   net_change_tod <- cmv_subs %>%
-    group_by(hour) %>%
+    dplyr::group_by(hour) %>%
     dplyr::summarise(n = n(),
                      change = sum(opinion_change),
                      net_change = change - (n - change)
                      )
   
   net_change_first <- cmv_subs %>%
-    filter(auth_first == T) %>%
-    group_by(date) %>%
+    dplyr::filter(auth_first == T) %>%
+    dplyr::group_by(date) %>%
     dplyr::summarise(n = n(),
                      change = sum(opinion_change),
                      net_change = change - (n - change)
@@ -196,22 +198,26 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
       geom_density(position = "stack", aes(y = ..count..), bw = 30/60)
   
   plots$coms_by_hour <- cmv_subs %>%
-    group_by(hour) %>%
-    summarise(adr = mean(direct_comments),
+    dplyr::group_by(hour) %>%
+    dplyr::summarise(adr = mean(direct_comments),
               n = n()
               ) %>%
     ggplot(aes(x = hour, y = adr)) +
       geom_line()
     
-  
   first_only <- cmv_subs %>%
-    filter(auth_first == T) %>%
-    filter_at(vars(ends_with(".x")), any_vars(is.na(.)))
+    dplyr::filter(auth_first == T) %>%
+    dplyr::filter_at(vars(ends_with(".x")), any_vars(is.na(.)))
   
   # Previous Sub density
   plots$prev_subs_density <- model_dat_dirty %>%
     ggplot(aes(x = prev_subs)) + 
       geom_density(aes(y = ..count..))
+  
+  # Plot density of similarity scores
+  plots$sim_score_density <- model_dat_dirty %>%
+    ggplot(aes(x = sim_scores)) +
+      geom_histogram()
   
   
   

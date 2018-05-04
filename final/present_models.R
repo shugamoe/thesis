@@ -78,12 +78,12 @@ get_perplexity <- function(model = F){
   require(glue)
   require(stringr)
   
-  warp_lda_paths <- list.files("pre_model_data/", pattern = "^warp")
+  warp_lda_paths <- list.files("pre_model_data/topic_model/", pattern = "^warp")
   num_topics <- as.integer(str_extract(warp_lda_paths, "[1234567890]+"))
   extract_perps <- function(fp){
     require(readr)
       
-    ffp <- as.character(glue("pre_model_data/{fp}"))
+    ffp <- as.character(glue("pre_model_data/topic_model/{fp}"))
     if (model){
       (read_rds(ffp)$lda_mod) 
     } else {
@@ -104,11 +104,14 @@ get_perplexity <- function(model = F){
 
 display_perp <- function(dat_return = T){
   require(tidyverse)
-  dat <- get_perplexity() 
+  dat <- get_perplexity() %>%
+    arrange(k)
   display_dat <- dat[-nrow(dat),] - dat[-1,]
   
+  theme_set(theme_minimal())
+  
   display_dat %>%
-    ggplot(aes(x = as.factor(k + dat$k[-1]), y = perps)) + 
+    ggplot(aes(x = as.factor(k + dat$k[-1] + 1), y = perps)) + 
       geom_line(aes(group = 1)) +
       labs(x = "CMV LDA Topics")
 }

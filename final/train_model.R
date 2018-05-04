@@ -111,8 +111,8 @@ revamp_cols <- function(model_dat, days_between = 730){
 ###
 # Function for training model given certain data
 ###
-train_model <- function(lsa_topics = 100, lda_topics = 7,
-                         max_days_between = 730, num_folds = 5, num_repeats = 1){
+train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
+                         max_days_between = CHOICE_DB, num_folds = K, num_repeats = REPEATS){
   require(tidyverse)
   require(readr)
   require(caret)
