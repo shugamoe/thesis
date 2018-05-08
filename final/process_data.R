@@ -57,10 +57,11 @@ calc_subred_gini <- function(user, df, days_between){
 ###
 # Main Function. Processes data with given parameters
 ###
-process_data <- function(lsa_topics = 100,
-                         lda_topics = 7,
-                         max_days_between = 730,
-                         dl_data = F, raw = F
+process_data <- function(lsa_topics = CHOICE_LSA,
+                         lda_topics = CHOICE_LDA,
+                         max_days_between = CHOICE_DB,
+                         tag = "",
+                         dl_data = F, raw = F, overwrite = F
                          ){
   require(tidyverse)
   require(topicmodels)
@@ -73,8 +74,8 @@ process_data <- function(lsa_topics = 100,
   require(sentimentr)
   require(lubridate)
   
-  out_fp <- glue("model_data/model_dat_db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}.rds")
-  if (file.exists(out_fp)){
+  out_fp <- glue("model_data/model_dat_db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}{tag}.rds")
+  if (file.exists(out_fp) & !overwrite){
     print(as.character(glue("Skipping (exists) '{out_fp}'")))
     return()
   }
@@ -255,8 +256,7 @@ process_data <- function(lsa_topics = 100,
   rm(sent_wc_info)
   
   # Join with cmv submissions, calc gini coef
-  std_subs_info <- inner_join(std_subs %>% mutate(is_cmv_sub = ifelse(subreddit == "r/changemyview", 1, 0)), 
-                              sub_auths_min_date) %>%
+  std_subs_info <- inner_join(std_subs, sub_auths_min_date) %>%
     filter(date_utc < first_cmv_date,
            # Filter for submissions only younger than . . . 
            abs(first_cmv_date - date_utc) < utc_days_to_ms(max_days_between)) %>%
@@ -269,6 +269,40 @@ process_data <- function(lsa_topics = 100,
                by = "author"
                ) %>%
     filter(author != "[deleted]")
+  
+  # If there is a tag that indicates to keep only those subject authors who had
+  # submission history within 30 days but to *include* older stuff from them,
+  # then do some dance to make it work. (Cohort in perpetuity sort of deal)
+  if (tag != ""){
+    require(magrittr)
+    cohort_num <- as.integer(str_extract(tag, "[\\d]{1,}"))
+    
+    if (cohort_num > max_days_between){
+      browser("You done fucked up.")
+    }
+    
+    # Get authors in cohort
+    cohort <- inner_join(std_subs, sub_auths_min_date) %>%
+      filter(date_utc < first_cmv_date,
+             # Filter for submissions only younger than . . . 
+             abs(first_cmv_date - date_utc) < utc_days_to_ms(cohort_num)) %>%
+      inner_join(first_cmv_subs %>% 
+                   select(author, starts_with("topic_"),
+                          deltas_from_author, cmv_word_count, cmv_avg_sent,
+                          starts_with("first_cmv_"),
+                          -first_cmv_date
+                          ),
+                 by = "author"
+                 ) %>%
+      filter(author != "[deleted]") %$%
+      unique(author)
+    cohort_tib <- tibble(author = cohort)
+    
+    # Remove non cohort 
+    std_subs_info <- std_subs_info %>% inner_join(cohort_tib)
+  }
+  
+  
   
   # auth_gini_fp <- glue("pre_model_data/gini_key_db_{max_days_between}.RData")
   # if (!file.exists(auth_gini_fp)){
@@ -435,12 +469,15 @@ process_data <- function(lsa_topics = 100,
   std_subs_info
 }
 
-all_process_data <- function(){
+all_process_data <- function(lsa_topics = LSA_TOPICS,
+                             lda_topics = LDA_TOPICS,
+                             max_days_between = DAYS_BETWEEN,
+                             tag = ""){
   require(purrr)
   source("master_vars.R")
   
-  as.list(expand.grid(lsa_topics = LSA_TOPICS, lda_topics = LDA_TOPICS,
-                      max_days_between = DAYS_BETWEEN)) %>%
+  as.list(expand.grid(lsa_topics = lsa_topics, lda_topics = lda_topics,
+                      max_days_between = max_days_between, tag = tag)) %>%
     pwalk(process_data)
 }
 
@@ -456,7 +493,7 @@ fix_dat <- function(){
   
   model_data_files <- list.files("model_data/", pattern = "^model_dat_db")
   days_between <- unique(
-    as.integer(str_extract(model_data_files, "[1234567890]+")))
+    as.integer(str_match(model_data_files, "db_([\\d]{1,})_")[,2]))
   
   cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs.rds")
   sub_auths_min_date <- cmv_subs %>%

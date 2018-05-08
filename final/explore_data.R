@@ -97,7 +97,7 @@ get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
   
   # Join with model ready data for even more stats
   source("train_model.R")
-  model_dat <- read_data(lsa_topics, lda_topics, max_days_between)
+  model_dat <- read_data(lsa_topics, lda_topics, max_days_between, tag)
   
   cmv_subs <- cmv_subs %>%
     left_join(model_dat %>% select(-first_cmv_date), by = "author") %>%
@@ -107,7 +107,7 @@ get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
 }
 
 explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
-                              max_days_between = CHOICE_DB){
+                              max_days_between = CHOICE_DB, tag = ""){
   require(tidyverse)
   require(ggplot2)
   require(lubridate)
@@ -115,7 +115,7 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   require(glue)
   require(stargazer)
   
-  out_fp <- glue("exploration_objects/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}.rds") 
+  out_fp <- glue("exploration_objects/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}{tag}.rds") 
   if (file.exists(out_fp)){
     print(as.character(glue("Skipping (exists) '{out_fp}'")))
     return()
@@ -124,7 +124,7 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   theme_set(theme_minimal())
   cmv_subs <- get_cmv_subs(lsa_topics, lda_topics, max_days_between)
   
-  model_dat_dirty <- read_data(lsa_topics, lda_topics, max_days_between) %>%
+  model_dat_dirty <- read_data(lsa_topics, lda_topics, max_days_between, tag) %>%
     dplyr::mutate(first_cmv_date = as.POSIXct(first_cmv_date, origin = "1970-01-01"),
            ps_mean_date = as.POSIXct(ps_mean_date, origin = "1970-01-01")
            ) %>%
@@ -132,12 +132,14 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
     
   model_dat <- model_dat_dirty %>%
     dplyr::select(starts_with("("))
+  
+  subject_count <- nrow(model_dat)
     
   all <- list()
   plots <- list()
   tables <- list()
   
-  stargazer_output_fp <- glue("figs/stargazer_tabs/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}.tex")
+  stargazer_output_fp <- glue("figs/stargazer_tabs/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}{tag}.tex")
   stargazer(as.data.frame(model_dat), 
             title = "Summary Statistics",
             header = FALSE, type = "latex", 
@@ -241,7 +243,7 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   all$model_dat <- model_dat_dirty
   
   info <- list(lsa_topics = lsa_topics, lda_topics = lda_topics,
-               max_days_between = max_days_between
+               max_days_between = max_days_between, subject_count = subject_count 
                )
   all$info <- info
   all
@@ -275,6 +277,8 @@ all_explore_data <- function(){
                       max_days_between = DAYS_BETWEEN)) %>%
     pwalk(explore_data)
 }
+
+
  
 # if (interactive()){
 #   cmv_subs <- get_cmv_subs()

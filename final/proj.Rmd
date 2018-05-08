@@ -428,7 +428,7 @@ of changing their views, and this is exactly the effect seen. Reassuringly, the
 similarity scores across all of the subject authors is distributed evenly about 0,
 so anomolies in this covariate do not seem to be the cause. Again, while I make no
 causal claims here there does seem to be evidence of self-affirmation theory's tenents
-extending beyond the immediate past, though not "too" far.
+extending beyond the immediate past.
 
 ```{r sim_score_density}
 expl$plots$sim_score_density +
@@ -436,8 +436,74 @@ expl$plots$sim_score_density +
        x = "Similarity Score")
 ```
 
+### Similarity Score with Varying Submission Histories 
 
+Recall that earlier I decided to define the subject author's submission history as
+their submission within one year before their first CMV opinion post. Would the
+similarity score also have a significant effect if the cutoffs were adjusted? While
+I made sure to select this cutoff without looking at the coefficient to avoid a 
+sort of p-hacking, it may still be instructive to see how similarity score's log odds
+CI reacts to changes in submission history cutoff. There is some indication that 
+the timing of the author's submission history is taken into account, as the variable
+"(AH) Average Previous Submission Date" is significant in the past model, though just
+slightly insignificant when moving to the full model. The figure below keeps the
+topic numbers for the LSA and LDA models, the other two pre model training
+parameters constant, and varies the submission history cutoff, comparing the resulting
+similarity score CIs for the full model.
 
+```{r sim_cis}
+ci_vals <- comp_ci_db() %>%
+  mutate(in_use = ifelse(db == 365, T, F))
+
+ci_vals %>% 
+  ggplot(aes(ymin=LowInner, ymax=HighInner, x=db)) + 
+    geom_linerange(show.legend = F, aes(color = in_use)) + 
+    geom_hline(yintercept = 0) +
+    labs(title = "Full Model | Similarity Score Confidence Intervals (95%)",
+         subtitle = "30, 60, 90 days and half year, one year, 2 years shown",
+         x = "Submission History Cutoff (days)",
+         y = "Log Odds CI"
+         )
+```
+
+Unfortunately it is hard to identify a consistent trend from the above figure.
+Towards the left part of the graph, or the strictly shorter histories there seem
+to be more significant effects, with the far right of the graph, including
+subject histories as far back as 2 years before their first CMV post has a clearly 
+insignificant CI. However in moving from right to left on the figure
+
+```{r samp_size_var}
+# Function that checks the count of subject author's as a function of
+# max_days_between, i.e. "submission history cutoff".
+count_subjects <- function(){
+  require(glue)
+  require(stringr)
+  require(readr)
+  require(tidyverse)
+  
+  model_dat_fps <- list.files("model_data/", pattern = "^model_dat_db")
+  
+  days <- str_match(model_data_files, "db_([\\d]{1,5})_")[,2] %>%
+    as.integer() %>%
+    unique() %>%
+    sort()
+  
+  # Select random model dats to read subject counts from
+  
+  # T/F "maps" tracking where each day between value is, only need one
+  day_locs <- days %>%
+    map_int(
+      ~sample(which(str_detect(model_dat_fps, glue("db_({.})_"))), 1)
+      )
+  
+  
+  subject_count <- model_dat_fps[day_locs] %>%
+    map_int(~nrow(read_rds(glue("model_data/{.}"))))
+  
+  rtn_tib <- tibble(days = days, suject_count = subject_count) 
+  browser()
+}
+```
 
 
 

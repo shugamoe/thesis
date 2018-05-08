@@ -12,25 +12,26 @@ library(tidytext)
 library(perm)
 
 
+source("master_vars.R")
 ###
 # Tool Functions
 ###
-read_data <- function(lsa_topics = 100, lda_topics = 7,
-                      max_days_between = 730){
+read_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
+                      max_days_between = CHOICE_DB, tag = ""){
   require(glue)
   require(readr)
-  data_fp <- glue("model_data/model_dat_db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}.rds")
+  data_fp <- glue("model_data/model_dat_db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}{tag}.rds")
   if (file.exists(data_fp)){
     return(read_rds(data_fp))
   } else {
     source("process_data.R")
     process_data(lsa_topics = lsa_topics, lda_topics = lda_topics,
-                 max_days_between = max_days_between)
-    return(read_data(lsa_topics, lda_topics, max_days_between))
+                 max_days_between = max_days_between, tag = tag)
+    return(read_data(lsa_topics, lda_topics, max_days_between, tag))
   }
 }
 
-revamp_cols <- function(model_dat, days_between = 730){
+revamp_cols <- function(model_dat, days_between = CHOICE_DB){
   require(dplyr)
   require(glue)
   require(lubridate)
@@ -112,20 +113,21 @@ revamp_cols <- function(model_dat, days_between = 730){
 # Function for training model given certain data
 ###
 train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
-                         max_days_between = CHOICE_DB, num_folds = K, num_repeats = REPEATS){
+                         max_days_between = CHOICE_DB, num_folds = K, num_repeats = REPEATS,
+                        tag = ""){
   require(tidyverse)
   require(readr)
   require(caret)
   require(glue)
   require(doMC)
   
-  out_fp <- glue("model_results/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}.rds")
+  out_fp <- glue("model_results/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}{tag}.rds")
   if (file.exists(out_fp)){
     print(as.character(glue("Skipping (exists) '{out_fp}'")))
     return()
   }
   
-  model_dat <- revamp_cols(read_data(lsa_topics, lda_topics, max_days_between),
+  model_dat <- revamp_cols(read_data(lsa_topics, lda_topics, max_days_between, tag),
                            days_between = max_days_between)
   
   registerDoMC(3)
@@ -203,23 +205,23 @@ train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   
   
   # Write results to summary file
-  sum_fp <- glue("model_results/roc_summary.rds")
-  # Gather all the information on folds and model types
-  new_tib <- as_tibble(resamples(results_dat)$values) %>%
-    select(-Resample) %>%
-    mutate(lsa_topics = lsa_topics,
-           lda_topics = lda_topics,
-           max_days_between = max_days_between,
-           k = num_folds,
-           num_repeats = num_repeats
-           )
-  if (!file.exists(sum_fp)){
-    out_tib <- new_tib
-  } else {
-    out_tib <- read_rds(sum_fp) %>% # Combine current and new tib (info)
-      bind_rows(new_tib)
-  }
-  write_rds(out_tib, sum_fp)
+  # sum_fp <- glue("model_results/roc_summary.rds")
+  # # Gather all the information on folds and model types
+  # new_tib <- as_tibble(resamples(results_dat)$values) %>%
+  #   select(-Resample) %>%
+  #   mutate(lsa_topics = lsa_topics,
+  #          lda_topics = lda_topics,
+  #          max_days_between = max_days_between,
+  #          k = num_folds,
+  #          num_repeats = num_repeats
+  #          )
+  # if (!file.exists(sum_fp)){
+  #   out_tib <- new_tib
+  # } else {
+  #   out_tib <- read_rds(sum_fp) %>% # Combine current and new tib (info)
+  #     bind_rows(new_tib)
+  # }
+  # write_rds(out_tib, sum_fp)
   
   
   # Write the raw results as well
@@ -229,12 +231,14 @@ train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
 
 
 
-all_train_models <- function(){
+all_train_models <- function(lsa_topics = LSA_TOPICS, lda_topics = LDA_TOPICS,
+                             max_days_between = DAYS_BETWEEN, tag = ""
+                             ){
   require(purrr)
   source("master_vars.R")
   
-  input_list <- as.list(expand.grid(lsa_topics = LSA_TOPICS, lda_topics = LDA_TOPICS,
-                      max_days_between = DAYS_BETWEEN))
+  input_list <- as.list(expand.grid(lsa_topics = lsa_topics, lda_topics = lda_topics,
+                      max_days_between = DAYS_BETWEEN, tag = tag))
   input_list$num_folds <- rep(K, length(input_list[[1]]))
   input_list$num_repeats <- rep(REPEATS, length(input_list[[1]]))
   
@@ -244,27 +248,27 @@ all_train_models <- function(){
   # Find non-overlapping 95% bootstrap confidence intervals for combinations of
   # LSA topics, LDA topics, and days between
   
-  roc_ci <- read_rds("model_results/roc_summary.rds") %>%
-    group_by(lsa_topics, lda_topics, max_days_between, k, num_repeats) %>%
-    dplyr::summarise(
-              base_bci = quantile(`model.base~ROC`, .025),
-              base_tci = quantile(`model.base~ROC`, .975),
-              past_bci = quantile(`model.past~ROC`, .025),
-              past_tci = quantile(`model.past~ROC`, .975),
-              full_bci = quantile(`model.full~ROC`, .025),
-              full_tci = quantile(`model.full~ROC`, .975)
-              )
-  write_rds(roc_ci, "model_results/roc_intervals.rds")
-  
-  remove_ci_overlap <- function(){
-    dub_roc_ci <- roc_ci %>%
-      inner_join(ungroup(roc_ci) %>% select(matches("(ci$)|(^k$)|(num_repeats)")),
-                 by = c("k", "num_repeats"), suffix = c("", ".check")) %>%
-      filter(
-        # base_bci > base_tci.check,
-        # past_bci > past_tci.check,
-        full_bci >= full_tci.check
-        )
-    
-  } 
+  # roc_ci <- read_rds("model_results/roc_summary.rds") %>%
+  #   group_by(lsa_topics, lda_topics, max_days_between, k, num_repeats) %>%
+  #   dplyr::summarise(
+  #             base_bci = quantile(`model.base~ROC`, .025),
+  #             base_tci = quantile(`model.base~ROC`, .975),
+  #             past_bci = quantile(`model.past~ROC`, .025),
+  #             past_tci = quantile(`model.past~ROC`, .975),
+  #             full_bci = quantile(`model.full~ROC`, .025),
+  #             full_tci = quantile(`model.full~ROC`, .975)
+  #             )
+  # write_rds(roc_ci, "model_results/roc_intervals.rds")
+  # 
+  # remove_ci_overlap <- function(){
+  #   dub_roc_ci <- roc_ci %>%
+  #     inner_join(ungroup(roc_ci) %>% select(matches("(ci$)|(^k$)|(num_repeats)")),
+  #                by = c("k", "num_repeats"), suffix = c("", ".check")) %>%
+  #     filter(
+  #       # base_bci > base_tci.check,
+  #       # past_bci > past_tci.check,
+  #       full_bci >= full_tci.check
+  #       )
+  #   
+  # } 
 }

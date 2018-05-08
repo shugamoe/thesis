@@ -9,23 +9,23 @@ library(coefplot)
 source("master_vars.R")
 
 read_models <- function(lsa_topics = 100, lda_topics = 7, max_days_between = 730,
-                        num_folds = K, num_repeats = REPEATS 
+                        num_folds = K, num_repeats = REPEATS, tag = ""
                         ){
   require(readr)
   require(glue)
-  models_fp <- glue("model_results/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}.rds")
+  models_fp <- glue("model_results/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}{tag}.rds")
   
   (read_rds(models_fp)) 
 }
 
 present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max_days_between = CHOICE_DB,
-                           num_folds = K, num_repeats = REPEATS, overwrite = F){
+                           num_folds = K, num_repeats = REPEATS, tag = "", overwrite = F){
   require(tidyverse)
   require(coefplot)
   require(caret)
   require(glue)
   
-  out_fp <- glue("figs/result_plots/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}.rds")
+  out_fp <- glue("figs/result_plots/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}{tag}.rds")
   if (file.exists(out_fp) & !overwrite){
     print(as.character(glue("Skipping creation of '{out_fp}' (exists)")))
     return(read_rds(out_fp))
