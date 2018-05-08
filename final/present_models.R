@@ -19,16 +19,16 @@ read_models <- function(lsa_topics = 100, lda_topics = 7, max_days_between = 730
 }
 
 present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max_days_between = CHOICE_DB,
-                           num_folds = K, num_repeats = REPEATS){
+                           num_folds = K, num_repeats = REPEATS, overwrite = F){
   require(tidyverse)
   require(coefplot)
   require(caret)
   require(glue)
   
   out_fp <- glue("figs/result_plots/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}.rds")
-  if (file.exists(out_fp)){
-    print(as.character(glue("Skipping (exists) '{out_fp}'")))
-    return()
+  if (file.exists(out_fp) & !overwrite){
+    print(as.character(glue("Skipping creation of '{out_fp}' (exists)")))
+    return(read_rds(out_fp))
   }
   result_plots <- list()
   
@@ -43,7 +43,7 @@ present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max
   result_plots$coef_plot <- multiplot(model_list, intercept = FALSE, only = FALSE,
             xlab = "Log Odds Value",
             single = FALSE,
-            sort = "alphabetical",
+            sort = "magnitude",
             # horizontal = TRUE,
             # pointSize = 4,
             scales = "fixed") + 
@@ -61,6 +61,15 @@ present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max
     ) +
     theme(plot.title = element_text(size = 20, hjust = 0.5),
           plot.subtitle = element_text(hjust = 0.5))
+  bad_names <- levels(result_plots$coef_plot$data$Coefficient)
+  
+  good_names <- str_replace( 
+      str_replace(
+        str_replace(bad_names, "``", ""), "`\\\\`", ""), 
+      "\\\\", ""
+  )
+
+ levels(result_plots$coef_plot$data$Coefficient) <- good_names
  write_rds(result_plots, out_fp)
  result_plots 
 }
@@ -127,6 +136,26 @@ all_present_models <- function(){
   
   input_list %>%
     pwalk(present_models)
+}
+
+# Function that lets you compare the CI values for a certain variable over all
+# the "days between" utilized.
+comp_ci_db <- function(var = "(Pre Debate) Similarity Score"){
+  require(purrr)
+  require(magrittr)
+  require(tidyverse)
+  
+  ci_vals <- DAYS_BETWEEN %>% map(~present_models(max_days_between = .) %$%
+                                coef_plot %$%
+                                data %>%
+                                 dplyr::filter(Model == "model.past",
+                                              Coefficient == var
+                                              ) %>%
+                                 dplyr::select(contains("Inner")) %>%
+                                 as.vector() 
+                                )
+  ci_vals <- bind_rows(ci_vals) %>%
+    mutate(db = DAYS_BETWEEN)
 }
 
 # 

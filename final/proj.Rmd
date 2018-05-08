@@ -214,7 +214,12 @@ I construct three distinct groups of features to utilize in my models. . .
   * Pre Debate
   * Post Debate
   
-For a complete overview of every feature, please see the appendix.
+For a complete overview of every feature, please see the appendix. A table of 
+summary statistics for these variables is given below.
+
+```{r sum_stats, results='asis'}
+cat(read_file(expl$tables$stargazer_fp))
+```
 
 ## Model Selection, Comparison, and Performance Evaluation
 
@@ -240,7 +245,7 @@ to compare against the pre persuasion based model.
 That being said, I plan to utilize models that:
 
   1. (Base) Utilize a single nominal feature as a base of comparison.
-  2. (Pre) Utilize soley pre persuasion features (Pre Debate and Author History).
+  2. (Past) Utilize soley pre persuasion features (Pre Debate and Author History).
   3. (Full) Utilize pre and post persuasion features .
   
 My model of interest, however, will be the pre persuasion model, and comparing
@@ -259,205 +264,11 @@ influential variables is practically impossible with variable importance.
 
 Besides comparing 95% CIs for log odds between the three models, I also utilize 
 standard model performance metrics of the receiver operating characteristic
-curve (ROC), as well as sensitivity and specificity. 95% bootstrap CIs for each
-of these three statistics are calculated using 20 reptitions of 10-fold
-cross-validation, for each of the models.
-  
-### Author History
+curve (ROC), as well as sensitivity (true positive rate) and specificity (true
+negative rate). 95% bootstrap CIs for each of these three statistics are
+calculated using 20 reptitions of 10-fold cross-validation, for each of the
+models, all of which used centered and scaled data.
 
-As the title suggests, this group of features focuses on the subject author's submission
-history.
-
-#### Submissions within 1 year before 1st CMV Post
-
-As alluded to above, this feature is a simple count of the subject author's submissions
-within a year before his or her first CMV Post. Since all the submissions included
-in this feature are subreddits that are *not* CMV, it fits nicely within self-affirmation's conception
-of success in an unrelated field, especially when paired with other author history
-features like "Mean Submission Score".
-
-#### Unique Subreddits Posted In
-
-For the subject author's submission history, this counts how many distinct subreddits
-the author participated in before posting to CMV.
-
-#### Average Previous Submission Date
-
-This feature seeks to establish the chronological "center" of the subject
-author's submission history.
-
-#### Edits Per Previous Submission
-
-If a subject author edits one of their previous post, any number of times, this
-can be tracked with the Reddit API. Edits occur for a variety of reasons, and may
-help indicate a user's responsiveness to comments on their submissions. For CMV
-submission this is usually the case, so I track previous, potentially similarly
-motivated behavior with this feature.
-
-#### Fraction Plural First Person Pronouns
-#### Fraction Singular First Person Pronouns
-#### Mean Plural First Person Pronouns
-#### Mean Singular First Person Pronouns
-
-@tan2016winning found:
-
-> First person pronouns are strong indicators of malleability, but first person
-plural pronouns correlate with resistance. . . individualizing
-one’s relationship with a belief using first person pronouns
-affirms the self, while first person plurals can indicate a diluted
-sense of group responsibility for the view
-
-In light of this, I have included a number of features concerning plural and
-singular first person pronouns, with the mean based ones being more sensitive to
-submission length (and thus, in many cases, quality), and the fraction based features
-being agnostic to the number of submissions and their length.
-
-#### Mean # of Words
-
-This feature serves as a proxy for mean prior submission quality, and is also
-included to calculate first person pronoun fractions.
-
-#### Mean Previous Submission Sentiment
-
-Utilizing the R package "sentimentr" I calculate a negative-positive (-1 to 1)
-sentiment score and take the average across the subject author's previous
-submissions.
-
-#### Mean Submission Score
-
-This is simply the average of all the subject author's previous submissions. While
-Reddit upvote/score manipulation is impossible to rule out, this helps to delineate
-the "success" of self-affirmation provided by the submissions.
-
-#### Removed CMV Subs 1 Year before 1st CMV Post
-
-This feature counts the subject author's previous "unsuccessful" earlier attempts
-at posting to r/ChangeMyView. CMV posts counted in this feature are those that
-are removed for some violation of the rules of the subreddit. Given the self-selective
-nature of CMV participants, unsucessful earlier integration into the community
-as measured through removed CMV posts could be an important feature to keep track
-of.
-
-#### Submissions with Content 1 Year before 1st CMV Post
-
-Not all submissions are created equal, at least compared to the higher quality
-discussion and opinion explanations found on CMV. This feature counts the number
-of subject author submissions that actually have textual content beyond, say, a
-hyperlink.
-
-#### Subreddit Gini Index
-
-This feature is a measure of subreddit submission inequality. This feature helps
-to differentiate between subject author's who focused a lot of their submissions
-in a few subreddits versus those who diversified the subreddits they posted
-submissions in.
-
-### Pre Debate
-
-This features are based on the subject author's first opinion submitted to CMV,
-but utilizing information that could only be gleaned at the time of the submission,
-before any debate initiated by other user's could take place. Together with the
-Author History features, these groups comprise the main thrust of the study, to
-test the predictive capability of subject author information from their history 
-and from their opinion on opinion malleability.
-
-#### # Words
-
-Counts the number of words contained within the CMV Submission.
-
-#### CMV Submission Date
-
-Tracks the date the subject author submitted their first opinion to CMV. (UTC Epoch)
-
-#### CMV Submission Hour
-
-Tracks the hour of the day the opinion was posted. (UTC 24 hours)
-
-#### Fraction Plural First Person Pronouns
-#### Fraction Singular First Person Pronouns
-#### Total Plural First Person Pronouns
-#### Total Singular First Person Pronouns
-
-These features track the fraction and totals of first person plural and singular
-pronouns of the subject author's first CMV Post.
-
-#### Sentiment
-
-Utilizing the R package "sentimentr" I calculate a negative-positive (-1 to 1)
-sentiment score of the subject author's first CMV Post.
-
-#### Similarity Score
-
-This features represents the similarity between two documents:
-  (1) The subject author's previous submissions within a year before their first opinion post.
-  (2) The subject author's first opinion post.
-  
-Utilizing the R package "text2vec", I calculate a score between -1 to 1 (least
-to most similar). This feature aims to serve as a proxy for how "unrelated" the
-subject author's previous submission content compared to their first opinion on CMV.
-Given the generally open nature of Reddit user submission histories, this feature
-helps exploit the opportunity to study self-affirmation in an online context.
-
-#### Topic {K} Score
-
-Before the debate surrounding a CMV submission occurs, the reasoning supporting
-a given opinion is available to browse. The subject matter of the reasoning and
-opinions varies widely. Accordingly a Latent Dirichlet Allocation (LDA) topic model is
-applied to *all* CMV opinion submissions in 2016, excluding those submissions whose
-content is unavailable (removed or deleted posts), and meta-subreddit announcement
-and discussion posts. Using the LDA topic model, the subject author's first opinion
-submissions are scored on K given topics ($$sum_{i=1}^{K}topic\_score_i=1$$). These
-score features are used to model the differing subject matter within the CMV 2016 submissions
-and how the subject author's first opinions fit into such a model.
-
-### Post Debate
-
-After the debate surrounding a CMV post has taken place, a variety of further
-information can be gleaned from the contents comprising the debate, and in some
-cases, moderation. In this study, the Post Debate variables only include the outcome
-of interest and a few other variables that are included in a  model that
-serves to benchmark the effectiveness of Pre Debate + Author History model. For 
-a more thorough examination of "Post Debate" and debate dynamics in general in 
-CMV, please see (@tan2016winning).
-
-#### Opinion Change?
-
-This is the outcome of interest for the study. This feature tracks whether the 
-subject author awarded at least 1 delta in their submission, indicating that the
-subject author changed their opinion.
-
-As alluded to previously, it is possible for comments on an CMV opinion to be 
-awarded deltas from Reddit users besides the subject author. Presumedly, Redditors
-who awarded such deltas share at the general opinion that the subject author has,
-but because these deltas are relatively rare and there is no mechanism to glean
-these Redditors' reasonings why they hold the opinion, such deltas are not taken
-into account.
-  
-#### # Direct Comments
-
-Direct comments are those Reddit comments whose "parent" is the subject author
-opinion submission. In other words, these are the comments directly attempting to
-change the opinion. In general, the number of direct comments to a CMV Post is a
-reliable indicator of the level of debate that occurred. Including such a feature
-in a model helps it to differentiate posts that may have not received a delta due
-to low debate activity.
-
-#### # OP Comments
-
-This feature simply tracks how many comments the subject author, as the original
-poster (OP) of their opinion submission, submitted during the discourse. Inclusion
-in a model helps to determine the role subject author participation played in the
-malleability of an opinion.
-
-#### # Total Comments
-
-This includes all the comments on the subject author's submission. These
-comments may reply to other comments attempting to change the subject author's,
-besides direct comments and OP comments, this feature also captures comments whose
-parent is not the opinion submission itself. These comments reply to other comments,
-whether they be direct comments, OP comments, or arbitrarily nested comments in a 
-comment tree. This feature helps to flesh out the "debates within the debates" that
-take place in a CMV post.
 
 ## Feature Engineering Practices
 
@@ -541,11 +352,101 @@ using cosine similarity with a Latent Semantic Analysis (LSA) topic model. The
 LSA model is first trained upon all subject authors' included submission history with
 `J` topics. Then, cosine similarity between each individual subject author's body of
 prior work and their first CMV opinion is calculated, ranging from -1 (least similar), to
-1 (most similar). However, in this case, unable to find heuristics to choose `J` I
+1 (most similar). However, in this case, unable to find heuristics to choose `J`, 
+I opt for a performance metric based approach to see if there are "better" values of `J`.
+
+In light of the Base, Pre, and Full models discussed earlier, I utilize varying
+values of `J`, as well as `K`, and submission history cutoff for the three models.
+Utilizing a grid search over these values, I compare 95% CIs of area under the ROC
+curve to see if specific combinations of these parameters that create my training 
+data result in significantly better model performance *within* either the Base,
+Pre, or Full models. I found that varying these three parameters within a
+reasonable set of options does not result in significantly better models, which
+justifies the heuristics I previously described  for the selection of submission
+history cutoff and `K`. With `J` then I simply opt for `J=150`.
+
+
+# Results
+
+## Model Performance (ROC, Sens, Spec)
+
+
+```{r show_perf, message=F}
+pm <- present_models()
+pm$roc
+```
+
+The three models shown in the figure above are significantly different in terms of
+ROC, the general performance measure seen here, with even the base model, which 
+only uses the number of words in the subject author's CMV submission, performing
+better than randomly guessing. Of course, opinion malleability, the subject authors'
+susceptibility to persuasion stil proves to be a rather difficult modelling task, as
+even with the highest ROC (token) full model is still shy of just .6 ROC.
+
+In comparing the full model to the past model, in terms of sensitivity, the two
+are  not distinguishable under the CIs constructed. This speaks somewhat well
+for the past model, as it is able to correctly classify ~81% of the subject authors
+changed opinions, and this true positive rate performance is not improved by
+utilizing the full model with variables taking into account aspects of the debate;
+intuitively these should be important. Additionally, specificity, the true
+identification of no opinion change, does differ between the past and full
+models, with the two models shitting just shy of 26% specificity. I have
+admitted that my version of the "full" model does not include a full gambit of
+debate interaction variables (@tan2016winning). Still, the lack of difference between the
+past and full models sensitivity, and their difference in specificity points to an
+interesting difference in the effectiveness of the past model between those
+subject author's whose first opinions were changed and those who remained fixed
+in their views.
+
+## Coefficient Analysis
+
+Below I give a coefficient plot of the three models, sorted by magnitude of their
+(log odds) effect.
+
+```{r show_coef, message=F}
+# Make the names great again
+pm$coef_plot
+```
+
+As alluded to before, the past model is the one most pertinent to analysis, but
+by having the full model included in the coefficient plot, one can verify the
+(in)stability of the coefficient's effects. Starting from the top, as is
+expected, most of the post debate variables (# OP Comments, # Direct Comments),
+are significant. After all, deltas cannot occur unless the subject author, as
+the OP, posts a comment that responds to a direct comment. There are however,
+more interesting coefficients to look at further down.
+
+## Self-Affirmation
+
+One of the main mechanisms which I have used to test self-affirmation is the calculation
+of a "similarity score" between the subject author's first CMV opinion reasoning
+and their submission history within 1 year. Self-affirmation theory notes that if
+global self-worth is bolstered by an unrelated domain, the subject author should
+tolerate a threat to the domain of interest. In the context of this study, I then
+expect similarity score to be have a negative effect on the subject author's chance
+of changing their views, and this is exactly the effect seen. Reassuringly, the
+similarity scores across all of the subject authors is distributed evenly about 0,
+so anomolies in this covariate do not seem to be the cause. Again, while I make no
+causal claims here there does seem to be evidence of self-affirmation theory's tenents
+extending beyond the immediate past, though not "too" far.
 
 ```{r sim_score_density}
-expl$plots$sim_score_density
+expl$plots$sim_score_density +
+  labs(title = "Similarity Score Density",
+       x = "Similarity Score")
 ```
+
+
+
+
+
+
+
+
+
+
+
+
 
 Using submissions and author histroy scraped from CMV activity in 2016, I construct several
 relevant features to help predict an opinion change/delta awarding. Like Tan et al. I utilize
@@ -1177,5 +1078,205 @@ Even with my disappointment I have a newfound respect of the precision and
 diligence required to utilize causaul inference methods with more experimental and more traditional data.
 
 \newpage
+
+# Appendix
+
+## Full Feature Description
+  
+### Author History
+
+As the title suggests, this group of features focuses on the subject author's submission
+history.
+
+#### Submissions within 1 year before 1st CMV Post
+
+As alluded to above, this feature is a simple count of the subject author's submissions
+within a year before his or her first CMV Post. Since all the submissions included
+in this feature are subreddits that are *not* CMV, it fits nicely within self-affirmation's conception
+of success in an unrelated field, especially when paired with other author history
+features like "Mean Submission Score".
+
+#### Unique Subreddits Posted In
+
+For the subject author's submission history, this counts how many distinct subreddits
+the author participated in before posting to CMV.
+
+#### Average Previous Submission Date
+
+This feature seeks to establish the chronological "center" of the subject
+author's submission history.
+
+#### Edits Per Previous Submission
+
+If a subject author edits one of their previous post, any number of times, this
+can be tracked with the Reddit API. Edits occur for a variety of reasons, and may
+help indicate a user's responsiveness to comments on their submissions. For CMV
+submission this is usually the case, so I track previous, potentially similarly
+motivated behavior with this feature.
+
+#### Fraction Plural First Person Pronouns
+#### Fraction Singular First Person Pronouns
+#### Mean Plural First Person Pronouns
+#### Mean Singular First Person Pronouns
+
+@tan2016winning found:
+
+> First person pronouns are strong indicators of malleability, but first person
+plural pronouns correlate with resistance. . . individualizing
+one’s relationship with a belief using first person pronouns
+affirms the self, while first person plurals can indicate a diluted
+sense of group responsibility for the view
+
+In light of this, I have included a number of features concerning plural and
+singular first person pronouns, with the mean based ones being more sensitive to
+submission length (and thus, in many cases, quality), and the fraction based features
+being agnostic to the number of submissions and their length.
+
+#### Mean # of Words
+
+This feature serves as a proxy for mean prior submission quality, and is also
+included to calculate first person pronoun fractions.
+
+#### Mean Previous Submission Sentiment
+
+Utilizing the R package "sentimentr" I calculate a negative-positive (-1 to 1)
+sentiment score and take the average across the subject author's previous
+submissions.
+
+#### Mean Submission Score
+
+This is simply the average of all the subject author's previous submissions. While
+Reddit upvote/score manipulation is impossible to rule out, this helps to delineate
+the "success" of self-affirmation provided by the submissions.
+
+#### Removed CMV Subs 1 Year before 1st CMV Post
+
+This feature counts the subject author's previous "unsuccessful" earlier attempts
+at posting to r/ChangeMyView. CMV posts counted in this feature are those that
+are removed for some violation of the rules of the subreddit. Given the self-selective
+nature of CMV participants, unsucessful earlier integration into the community
+as measured through removed CMV posts could be an important feature to keep track
+of.
+
+#### Submissions with Content 1 Year before 1st CMV Post
+
+Not all submissions are created equal, at least compared to the higher quality
+discussion and opinion explanations found on CMV. This feature counts the number
+of subject author submissions that actually have textual content beyond, say, a
+hyperlink.
+
+#### Subreddit Gini Index
+
+This feature is a measure of subreddit submission inequality. This feature helps
+to differentiate between subject author's who focused a lot of their submissions
+in a few subreddits versus those who diversified the subreddits they posted
+submissions in.
+
+### Pre Debate
+
+This features are based on the subject author's first opinion submitted to CMV,
+but utilizing information that could only be gleaned at the time of the submission,
+before any debate initiated by other user's could take place. Together with the
+Author History features, these groups comprise the main thrust of the study, to
+test the predictive capability of subject author information from their history 
+and from their opinion on opinion malleability.
+
+#### # Words
+
+Counts the number of words contained within the CMV Submission.
+
+#### CMV Submission Date
+
+Tracks the date the subject author submitted their first opinion to CMV. (UTC Epoch)
+
+#### CMV Submission Hour
+
+Tracks the hour of the day the opinion was posted. (UTC 24 hours)
+
+#### Fraction Plural First Person Pronouns
+#### Fraction Singular First Person Pronouns
+#### Total Plural First Person Pronouns
+#### Total Singular First Person Pronouns
+
+These features track the fraction and totals of first person plural and singular
+pronouns of the subject author's first CMV Post.
+
+#### Sentiment
+
+Utilizing the R package "sentimentr" I calculate a negative-positive (-1 to 1)
+sentiment score of the subject author's first CMV Post.
+
+#### Similarity Score
+
+This features represents the similarity between two documents:
+  (1) The subject author's previous submissions within a year before their first opinion post.
+  (2) The subject author's first opinion post.
+  
+Utilizing the R package "text2vec", I calculate a score between -1 to 1 (least
+to most similar). This feature aims to serve as a proxy for how "unrelated" the
+subject author's previous submission content compared to their first opinion on CMV.
+Given the generally open nature of Reddit user submission histories, this feature
+helps exploit the opportunity to study self-affirmation in an online context.
+
+#### Topic {K} Score
+
+Before the debate surrounding a CMV submission occurs, the reasoning supporting
+a given opinion is available to browse. The subject matter of the reasoning and
+opinions varies widely. Accordingly a Latent Dirichlet Allocation (LDA) topic model is
+applied to *all* CMV opinion submissions in 2016, excluding those submissions whose
+content is unavailable (removed or deleted posts), and meta-subreddit announcement
+and discussion posts. Using the LDA topic model, the subject author's first opinion
+submissions are scored on K given topics ($$sum_{i=1}^{K}topic\_score_i=1$$). These
+score features are used to model the differing subject matter within the CMV 2016 submissions
+and how the subject author's first opinions fit into such a model.
+
+### Post Debate
+
+After the debate surrounding a CMV post has taken place, a variety of further
+information can be gleaned from the contents comprising the debate, and in some
+cases, moderation. In this study, the Post Debate variables only include the outcome
+of interest and a few other variables that are included in a  model that
+serves to benchmark the effectiveness of Pre Debate + Author History model. For 
+a more thorough examination of "Post Debate" and debate dynamics in general in 
+CMV, please see (@tan2016winning).
+
+#### Opinion Change?
+
+This is the outcome of interest for the study. This feature tracks whether the 
+subject author awarded at least 1 delta in their submission, indicating that the
+subject author changed their opinion.
+
+As alluded to previously, it is possible for comments on an CMV opinion to be 
+awarded deltas from Reddit users besides the subject author. Presumedly, Redditors
+who awarded such deltas share at the general opinion that the subject author has,
+but because these deltas are relatively rare and there is no mechanism to glean
+these Redditors' reasonings why they hold the opinion, such deltas are not taken
+into account.
+  
+#### # Direct Comments
+
+Direct comments are those Reddit comments whose "parent" is the subject author
+opinion submission. In other words, these are the comments directly attempting to
+change the opinion. In general, the number of direct comments to a CMV Post is a
+reliable indicator of the level of debate that occurred. Including such a feature
+in a model helps it to differentiate posts that may have not received a delta due
+to low debate activity.
+
+#### # OP Comments
+
+This feature simply tracks how many comments the subject author, as the original
+poster (OP) of their opinion submission, submitted during the discourse. Inclusion
+in a model helps to determine the role subject author participation played in the
+malleability of an opinion.
+
+#### # Total Comments
+
+This includes all the comments on the subject author's submission. These
+comments may reply to other comments attempting to change the subject author's,
+besides direct comments and OP comments, this feature also captures comments whose
+parent is not the opinion submission itself. These comments reply to other comments,
+whether they be direct comments, OP comments, or arbitrarily nested comments in a 
+comment tree. This feature helps to flesh out the "debates within the debates" that
+take place in a CMV post.
 
 # Citations

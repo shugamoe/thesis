@@ -74,7 +74,7 @@ get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
   
     
   cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs_raw.rds") %>%
-      mutate(posix = as.POSIXct(date_utc, origin = "1970-01-01"),
+      dplyr::mutate(posix = as.POSIXct(date_utc, origin = "1970-01-01"),
              date = as_date(posix),
              dtime = as_datetime(date),
              tod = hour(posix) + minute(posix) / 60,
@@ -82,10 +82,10 @@ get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
              fill = 1,
              opinion_change = ifelse(deltas_from_author > 0, T, F)
              ) %>%
-      filter(year(date) == 2016)
+      dplyr::filter(year(date) == 2016)
   
   sub_auths_min_date <- cmv_subs %>%
-    group_by(author) %>%
+    dplyr::group_by(author) %>%
     dplyr::summarise(last_cmv_date = nth_date(date_utc, 1, T),
               first_cmv_date = nth_date(date_utc, 1, F),
               tot_cmv_subs = n())
@@ -217,7 +217,7 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   # Plot density of similarity scores
   plots$sim_score_density <- model_dat_dirty %>%
     ggplot(aes(x = sim_scores)) +
-      geom_histogram()
+      geom_density()
   
   
   
