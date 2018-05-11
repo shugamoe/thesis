@@ -8,7 +8,7 @@ library(caret)
 library(coefplot)
 source("master_vars.R")
 
-read_models <- function(lsa_topics = 100, lda_topics = 7, max_days_between = 730,
+read_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max_days_between = CHOICE_DB,
                         num_folds = K, num_repeats = REPEATS, tag = ""
                         ){
   require(readr)
@@ -32,7 +32,7 @@ present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max
   }
   result_plots <- list()
   
-  model_list <- read_models(lsa_topics, lda_topics, max_days_between)
+  model_list <- read_models(lsa_topics, lda_topics, max_days_between, tag = tag)
   
   
   result_plots$roc <- dotplot(resamples(model_list), # metric = c("ROC", "Sens", "Spec"),
@@ -140,22 +140,47 @@ all_present_models <- function(){
 
 # Function that lets you compare the CI values for a certain variable over all
 # the "days between" utilized.
-comp_ci_db <- function(var = "(Pre Debate) Similarity Score"){
+comp_cohort_cis <- function(tag = TAG){
   require(purrr)
   require(magrittr)
   require(tidyverse)
+  require(stringr)
   
-  ci_vals <- DAYS_BETWEEN %>% map(~present_models(max_days_between = .) %$%
+  cohort_num <- as.integer(str_extract(tag, "[\\d]{1,}"))
+  ci_vals <- CH_DB %>% map(~present_models(max_days_between = ., tag = TAG) %$%
                                 coef_plot %$%
                                 data %>%
-                                 dplyr::filter(Model == "model.past",
-                                              Coefficient == var
+                                 dplyr::filter(Model == "model.full",
                                               ) %>%
-                                 dplyr::select(contains("Inner")) %>%
-                                 as.vector() 
+                                 dplyr::select(Coefficient, contains("Inner"))
                                 )
-  ci_vals <- bind_rows(ci_vals) %>%
-    mutate(db = DAYS_BETWEEN)
+  add_db <- function(df, db){
+    df %>%
+      mutate(db = db,
+             cohort_num = cohort_num
+             )
+  }
+  ci_vals <- map2(ci_vals, CH_DB, add_db) %>%
+    bind_rows()
+  # Undo fancy naming scheme
+  cutoff <- unique(ci_vals$Coefficient[str_detect(ci_vals$Coefficient, "Submissions with Content")])
+  num_subs <- unique(ci_vals$Coefficient[str_detect(ci_vals$Coefficient, "Submissions within")])
+  removed <-  unique(ci_vals$Coefficient[str_detect(ci_vals$Coefficient, "Removed CMV Subs")])
+  
+  ci_vals <- ci_vals %>%
+    mutate(Coefficient = ifelse(Coefficient %in% cutoff
+                                ifelse(str_detect(Coefficient, "Submissions within"),
+                                       "Submissions within cutoff before 1st CMV Post",
+                                       ifelse(str_detect(Coefficient, "Removed CMV Subs"),
+                                              "Removed CMV Subs within cutoff before 1st CMV Post"
+                                              )
+                                       ), Coefficient
+                                )
+           )
+  
+  browser()
+    
+  (ci_vals)
 }
 
 # 

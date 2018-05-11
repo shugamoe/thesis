@@ -63,8 +63,8 @@ get_k_lda <- function(lda_topics = 7){
     glue("pre_model_data/topic_model/warp_k_{lda_topics}.RData"))$lda_mod)
 }
 
-get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
-                         max_days_between = 730){
+get_cmv_subs <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
+                         max_days_between = CHOICE_DB, tag = ""){
   require(tidyverse)
   require(readr)
   require(lubridate)
@@ -74,7 +74,8 @@ get_cmv_subs <- function(lsa_topics = 100, lda_topics = 7,
   
     
   cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs_raw.rds") %>%
-      dplyr::mutate(posix = as.POSIXct(date_utc, origin = "1970-01-01"),
+      dplyr::mutate(
+             posix = as.POSIXct(date_utc, origin = "1970-01-01"),
              date = as_date(posix),
              dtime = as_datetime(date),
              tod = hour(posix) + minute(posix) / 60,
@@ -124,7 +125,7 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   theme_set(theme_minimal())
   cmv_subs <- get_cmv_subs(lsa_topics, lda_topics, max_days_between)
   
-  model_dat_dirty <- read_data(lsa_topics, lda_topics, max_days_between, tag) %>%
+  model_dat_dirty <- read_data(lsa_topics, lda_topics, max_days_between, tag = tag) %>%
     dplyr::mutate(first_cmv_date = as.POSIXct(first_cmv_date, origin = "1970-01-01"),
            ps_mean_date = as.POSIXct(ps_mean_date, origin = "1970-01-01")
            ) %>%
@@ -156,14 +157,17 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
     dplyr::group_by(date) %>%
     dplyr::summarise(n = n(),
                      change = sum(opinion_change),
-                     net_change = change - (n - change)
-                     )
+                     net_change = change - (n - change),
+                     prop_change = change / n
+                     ) %>%
+    dplyr::mutate(more_change = ifelse(prop_change > .5, "green", "red"))
   
   net_change_tod <- cmv_subs %>%
     dplyr::group_by(hour) %>%
     dplyr::summarise(n = n(),
                      change = sum(opinion_change),
-                     net_change = change - (n - change)
+                     net_change = change - (n - change),
+                     prop_change = change / n
                      )
   
   net_change_first <- cmv_subs %>%
@@ -177,6 +181,10 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   # Plot of Net Opinion Change Overall
   plots$all_net_change <- net_change %>%
     ggplot(aes(x = date, y = net_change)) +
+      geom_line()
+  
+  plots$prop_change <- net_change %>%
+    ggplot(aes(x = date, y = prop_change)) + 
       geom_line()
   
   plots$all_tod_net_change <- net_change_tod %>%
@@ -199,12 +207,16 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
     ggplot(aes(x = tod, group = opinion_change, fill = opinion_change)) +
       geom_density(position = "stack", aes(y = ..count..), bw = 30/60)
   
-  plots$coms_by_hour <- cmv_subs %>%
+  plots$coms_by_sub_by_hour <- cmv_subs %>%
     dplyr::group_by(hour) %>%
     dplyr::summarise(adr = mean(direct_comments),
               n = n()
               ) %>%
-    ggplot(aes(x = hour, y = adr)) +
+    ggplot(aes(x = hour, y = adr / n)) +
+      geom_line()
+  
+  plots$prop_change_by_hour <- net_change_tod %>%
+    ggplot(aes(x = hour, y = prop_change)) + 
       geom_line()
     
   first_only <- cmv_subs %>%

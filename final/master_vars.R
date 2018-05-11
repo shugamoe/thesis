@@ -12,4 +12,4 @@ CHOICE_DB <- 365
 
 COHORT <- 30
 TAG <- as.character(glue::glue("_{COHORT}"))
-CH_DB <- c(30, 60, 90, 180, 270, 365, 545, 720)
+CH_DB <- c(30, 60, 90, 180, 270, 365, 545, 730)

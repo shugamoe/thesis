@@ -166,19 +166,23 @@ effect on a CMV opinion given in 2016? Deciding on a cutoff, if to have one at a
 tradeoff, one the one hand, a shorter cutoff, say only including the last 30 days 
 worth of submissions before a subject author's first CMV opinion allows only the recent, and 
 perhaps most relevant information of that author to be taken into account. However,
-a short cutoff also precludes more subject authors from study, given the higher bar
+a short cutoff also precludes more subject authors and submission from study, given the higher bar
 on activity demanded from the cutoff. A longer cutoff, or not having a cutoff at all
-includes more subject authors in the study, with all possible information, but
+includes more subject authors and submission in the study, with all possible information, but
 information gleaned from older submissions might be "noise" to our model that
 attempts to predict whether the further off opinion changes or not.
 
 In light of these tradeoffs (which are heuristics at best), I begin by including
 only submission histories that are no more than 1 year older than a CMV author's
 first CMV opinion. If an author does not have submission history within one year
-of their first CMV opinion, they are not counted as subject authors. Given this criteria,
+of their first CMV opinion, they are not counted as subject authors. Because this pre-modelling
+parameter has such a large effect on how many subject authors there are, as well as the sort
+of information that is gathered about them, I will later relax my constraint on the submission
+history cutoff. More on this in the methodology.
+
 `r nrow(expl$model_dat)` (`r pretty_percent(nrow(expl$model_dat) / sum(expl$cmv_subs$auth_first))`),
-viable subject authors are available for study. A density figure of the number of submission prior to a subject
-author's first CMV submission is given below.
+viable subject authors are available for study. A density figure of the number
+of submissions prior to a subject author's first CMV submission is given below.
 
 ```{r}
 median_prev_sub <- median(expl$model_dat$`(AH) # Submissions within 1 years before 1st CMV Post`)
@@ -191,18 +195,6 @@ median_prev_sub <- median(expl$model_dat$`(AH) # Submissions within 1 years befo
     geom_vline(aes(xintercept = median_prev_sub), linetype = 3)
 )
 ```
-
-Accordingly then, from my two major sources of data, 2016 CMV opinions, and the
-submission histories of their author's I have narrowed down my scope of inquiry
-to the opinions and submission histories of the subject authors. These subject authors
-are those Reddit users who have:
-  
-  1. Submitted their first opinion to CMV in 2016
-  2. Have at least 1 Submission within a year before their first CMV opinion.
-  
-With the specific population of interest specified, features can be constructed and
-categorized to provide the best attempt at predicting whether subject authors' opinions
-changed.
 
 # Methodology
 
@@ -242,17 +234,19 @@ potentially capture information available after the outcome variable is fixed,
 does not respect the temporality of cause and effect, but is useful as a benchmark 
 to compare against the pre persuasion based model.
 
-That being said, I plan to utilize models that:
+That being said, I plan to use models that:
 
   1. (Base) Utilize a single nominal feature as a base of comparison.
   2. (Past) Utilize soley pre persuasion features (Pre Debate and Author History).
-  3. (Full) Utilize pre and post persuasion features .
+  3. (Full) Utilize pre and post persuasion features.
   
 My model of interest, however, will be the pre persuasion model, and comparing
 it's performance and the roles of its component features against the base and
-full model. As one may expect however, the using only pre persuasion features
-disregards a great deal of useful intra and post debate information. Thankfully
-my main goal is not eking out model performance in a straightforward
+full model. As one may expect however, using only pre persuasion features
+disregards a great deal of useful intra and post debate information, and even
+information pertaining to the subject author's pre persuasion characteristics.
+
+Thankfully, my main goal is not eking out model performance in a straightforward
 classification task (a model where the *prediction* aspect does not respect
 temporality). As such, I do not utilize less interpretable boosted or bagging
 models, but opt for a simple logistic regression model. With this model, I can 
@@ -265,10 +259,10 @@ influential variables is practically impossible with variable importance.
 Besides comparing 95% CIs for log odds between the three models, I also utilize 
 standard model performance metrics of the receiver operating characteristic
 curve (ROC), as well as sensitivity (true positive rate) and specificity (true
-negative rate). 95% bootstrap CIs for each of these three statistics are
-calculated using 20 reptitions of 10-fold cross-validation, for each of the
-models, all of which used centered and scaled data.
-
+negative rate) with these latter two statistics based on a `p=.5` decision
+boundary. 95% bootstrap CIs for each of these three statistics are calculated
+using 20 reptitions of 10-fold cross-validation, for each of the models, all of
+which used centered and scaled data.
 
 ## Feature Engineering Practices
 
@@ -365,6 +359,70 @@ reasonable set of options does not result in significantly better models, which
 justifies the heuristics I previously described  for the selection of submission
 history cutoff and `K`. With `J` then I simply opt for `J=150`.
 
+```{r samp_size_var}
+# Function that checks the count of subject author's as a function of
+# max_days_between, i.e. "submission history cutoff".
+count_subjects <- function(){
+  require(glue)
+  require(stringr)
+  require(readr)
+  require(tidyverse)
+  
+  model_dat_fps <- list.files("model_data/", pattern = "^model_dat_db.*[^_30].rds$")
+  
+  days <- str_match(model_dat_fps, "db_([\\d]{1,5})_ltv")[,2] %>%
+    as.integer() %>%
+    unique() %>%
+    sort() 
+  
+  # Select random model dats to read subject counts from
+  
+  # T/F "maps" tracking where each day between value is, only need one
+  day_locs <- days %>%
+    map_int(
+      ~sample(which(str_detect(model_dat_fps, glue("db_({.})_"))), 1)
+      )
+  
+  
+  subject_count <- model_dat_fps[day_locs] %>%
+    map_int(~nrow(read_rds(glue("model_data/{.}"))))
+  
+  rtn_tib <- tibble(history_cutoff = days, subject_count = subject_count) 
+}
+
+subject_counts <- count_subjects()
+```
+
+### Introducing A "Cohort" Approach
+
+All of the author history variables (AH) are highly dependent on the
+aforementioned submission history cutoff, or more specifically, for a given
+subject author, the number of submissions added or dropped due to an adjustment
+of submission cutoff can significantly affect author history variables. In the
+case of a subject author with only two submissions, this effect is quite
+substantial should the cutoff change halve the history the models look at. Also,
+for those subject authors whose submissions span a long period of time, what
+plays a larger role? Their earlier, or later submissions?
+
+Thus, there must be some effort taken to adjust the history cutoff in a
+meaningful way. My previous criteria for selecting subject authors, given a
+fixed history cutoff was simply to include them should they have submission
+history within the window alotted by the cutoff. However, this criteria is not
+condusive to a method which calls for a variable submission cutoff. Adjusting
+the cutoff, depending on the direction, would lead to including or rejecting
+subject authors for modelling, making comparison of models run with different
+cutoffs more difficult. To more directly address the issues of time and submission
+history, I use a "Cohort" approach, which fixes the subject author's initially
+in the shortest submission history cutoff (30 days), and keeps these authors while
+adjusting that cutoff to 60 days, 90 days, 180 days, and beyond.
+
+In utilizing a "Cohort" approach, the signifiance of many of the author history 
+features can be more thoroughly analyzed. The standard approach that I have previously
+described, with fixed values of `K`, `J`, and cutoff, can still be analyzed, and
+variable significance can still be determined, but one can have more confidence of 
+the link between variables should they pass through the gauntlet of signifiance
+in the standard past model, the standard full model, and finally, by means of a 
+permutation test to help determine significance in the "Cohort" approach.
 
 # Results
 
@@ -390,7 +448,7 @@ changed opinions, and this true positive rate performance is not improved by
 utilizing the full model with variables taking into account aspects of the debate;
 intuitively these should be important. Additionally, specificity, the true
 identification of no opinion change, does differ between the past and full
-models, with the two models shitting just shy of 26% specificity. I have
+models, with the two models sitting just shy of 26% specificity. I have
 admitted that my version of the "full" model does not include a full gambit of
 debate interaction variables (@tan2016winning). Still, the lack of difference between the
 past and full models sensitivity, and their difference in specificity points to an
@@ -401,7 +459,9 @@ in their views.
 ## Coefficient Analysis
 
 Below I give a coefficient plot of the three models, sorted by magnitude of their
-(log odds) effect.
+(log odds) effect. Because the model is trained on centered and scaled data, the 
+effects displayed below pertain to a one standard deviation increase of the variable 
+in question.
 
 ```{r show_coef, message=F}
 # Make the names great again
@@ -416,7 +476,7 @@ are significant. After all, deltas cannot occur unless the subject author, as
 the OP, posts a comment that responds to a direct comment. There are however,
 more interesting coefficients to look at further down.
 
-## Self-Affirmation
+### Self-Affirmation
 
 One of the main mechanisms which I have used to test self-affirmation is the calculation
 of a "similarity score" between the subject author's first CMV opinion reasoning
@@ -436,714 +496,160 @@ expl$plots$sim_score_density +
        x = "Similarity Score")
 ```
 
-### Similarity Score with Varying Submission Histories 
+### First Person Pronouns
 
-Recall that earlier I decided to define the subject author's submission history as
-their submission within one year before their first CMV opinion post. Would the
-similarity score also have a significant effect if the cutoffs were adjusted? While
-I made sure to select this cutoff without looking at the coefficient to avoid a 
-sort of p-hacking, it may still be instructive to see how similarity score's log odds
-CI reacts to changes in submission history cutoff. There is some indication that 
-the timing of the author's submission history is taken into account, as the variable
-"(AH) Average Previous Submission Date" is significant in the past model, though just
-slightly insignificant when moving to the full model. The figure below keeps the
-topic numbers for the LSA and LDA models, the other two pre model training
-parameters constant, and varies the submission history cutoff, comparing the resulting
-similarity score CIs for the full model.
+Within the coefficient plot, a number of first person pronoun coefficients prove
+to be significant, even in the full model, yet there are some slightly curious
+results to parse as well.
 
-```{r sim_cis}
-ci_vals <- comp_ci_db() %>%
-  mutate(in_use = ifelse(db == 365, T, F))
+#### Singular
 
-ci_vals %>% 
-  ggplot(aes(ymin=LowInner, ymax=HighInner, x=db)) + 
-    geom_linerange(show.legend = F, aes(color = in_use)) + 
-    geom_hline(yintercept = 0) +
-    labs(title = "Full Model | Similarity Score Confidence Intervals (95%)",
-         subtitle = "30, 60, 90 days and half year, one year, 2 years shown",
-         x = "Submission History Cutoff (days)",
-         y = "Log Odds CI"
-         )
+For author history (AH) and Pre Debate, the mean and total number of singular
+first person pronouns have a significantly positive effect on first opinion
+malleability. However, the *fraction* version of both of these variables have
+significantly negative effects. This stands in constrast the findings of
+@tan2016winning, who found, at least for CMV opinions, that *both* fraction and
+total singular FP pronouns had positive effects. The findings on first person pronouns
+and "openness", or in this case malleability, are not universal. @pb99 found negative
+correlations between openness and first person singular pronouns.
+
+The full and past models both utilize variables accounting for the number of
+words in a subject author's submission history and first opinion post, so the
+most cogent explanation of these effects is that increased useage of singular FP
+pronouns, but coupled with longer submission or opinion reasonings in general,
+as to keep the fraction relatively constant, are correlated with increased first
+opinion malleability.
+
+#### Plural
+
+For plural FP pronouns, the only coefficient that survives the transition
+from past to full model is the negative significant effect of mean number of plural first person pronouns in the
+author history (AH). While @tan2016winning found more signifiance with the fraction
+of plural FP pronouns in the CMV opinion as well, the directionality of this finding makes sense,
+given:
+
+> [F]irst person plurals can indicate a diluted sense of group
+responsibility for the view.
+
+### CMV Topics
+
+Naturally, one assumes that certain subject matter influences first opinion
+malleability, and this is reinforced by the coefficient plot. Topic 6 and Topic
+1 have significant effects, but in opposite directions, positive and negative,
+respectively. Looking again at the top ten words for these topics, Topic 1 can
+perhaps be interpreted as black-white race related questions, while Topic 6 is a
+little more difficult to interpret, consisting of many male pronouns.
+
+Given the self-selecting nature of r/ChangeMyViews users, it is interesting to see 
+increased malleability associated with black white race relations, but decreased
+when it comes to (perhaps) "male" issues. However, give the 18-29 male skew of the 
+Reddit userbase as a whole, maybe this is not so surprising (@pew2013)
+
+```{r}
+knitr::kable(expl$tables$top_words[c(1, 6)])
 ```
 
-Unfortunately it is hard to identify a consistent trend from the above figure.
-Towards the left part of the graph, or the strictly shorter histories there seem
-to be more significant effects, with the far right of the graph, including
-subject histories as far back as 2 years before their first CMV post has a clearly 
-insignificant CI. However in moving from right to left on the figure
+### Submission History Diversity and Equality
 
-```{r samp_size_var}
-# Function that checks the count of subject author's as a function of
-# max_days_between, i.e. "submission history cutoff".
-count_subjects <- function(){
-  require(glue)
-  require(stringr)
-  require(readr)
-  require(tidyverse)
-  
-  model_dat_fps <- list.files("model_data/", pattern = "^model_dat_db")
-  
-  days <- str_match(model_data_files, "db_([\\d]{1,5})_")[,2] %>%
-    as.integer() %>%
-    unique() %>%
-    sort()
-  
-  # Select random model dats to read subject counts from
-  
-  # T/F "maps" tracking where each day between value is, only need one
-  day_locs <- days %>%
-    map_int(
-      ~sample(which(str_detect(model_dat_fps, glue("db_({.})_"))), 1)
-      )
-  
-  
-  subject_count <- model_dat_fps[day_locs] %>%
-    map_int(~nrow(read_rds(glue("model_data/{.}"))))
-  
-  rtn_tib <- tibble(days = days, suject_count = subject_count) 
-  browser()
-}
-```
+The author history variables "(AH) # Unique Subreddits Posted In" and "(AH)
+Subreddit Gini Index" together capture the diversity and equality of communities
+for a subject author. For both the Gini Index and number of unique subreddits,
+one sees a negative significant effect. More diversity then, (more unique
+subreddits), has decreased odds of opinion malleability, while more equality (lower Gini)
+between a fixed number of communities has increased odds of opinion
+malleability. The model suggests that increased equality of participation can
+offset, up to a certain point (given the 0, 1 bounds of the gini coefficient),
+the effects of  increased diversity.
 
+### Time
 
+The coefficient plot also indicates that the timing of a subject author's first
+opinion also effects malleability. The variable for the date and hour of the day,
+both indicate significant postive and negative effects, respectively, on the odds
+of opinion malleability. Though 2016, opinion submissions became more likely, overall
+to change, and within each day, opinion submissions posted later in the day (UTC),
+were less likely to change. The date effect result seems quite in line with
+information that can be gleaned from unconditional, exploratory data analysis
+(example below), suggesting time trends, and other information not in the model,
+like current news, likely  influences malleability. However, the time of day/hour
+effect has a less obvious cause. Comments per CMV submission tend to decrease
+for later hours, but in the full model, this variable is already taken into
+account. It might be possible then for the time of day trend to indicate differing
+malleability for subject author's from different time zones, but under the current
+framework this is difficult to determine.
 
+```{r expl_time_trends}
+(expl$plots$prop_change +
+    labs(title = "Proportion of Opinion Change Per CMV Submission",
+         subtitle = "with linear smoothing",
+         x = "Date",
+         y = "Proportion of Changed Opinions") + 
+    geom_smooth(method = "lm") + 
+    geom_hline(yintercept = .5, linetype = 2)
+    )
 
-
-
-
-
-
-
-Using submissions and author histroy scraped from CMV activity in 2016, I construct several
-relevant features to help predict an opinion change/delta awarding. Like Tan et al. I utilize
-the wording of the opinion itself, but I also go beyond and construct features from the OP’s
-prior submission history. Like Tan et al. I create some features linked to self-affirmation
-theory in psychology, but also utilizes features specific to the place of submissions in Reddit
-overall.
-
-I utilize weighted logistic regression models and outperform earlier attempts to predict the
-opinion change on CMV. Whereas previous psychological studies have found the effects of
-self-affirmation in the immediate past to be statistically significant in predicting opinion
-malleability (Cohen, Aronson, and Steele 2000), the models here find that self-affirmation
-features utilizing the entirety of an OP’s submission history, dating back months and sometimes
-years, also have signifiant effects in the same domain. Thus, this paper provides the first
-evidence to suggest that self-affirmation has such far-reaching effects.
-
-Persuasion is a topic of a large research effort in a number of fields. There's psychology and a number of its subfields, 
-of course, but also fields like international relations, linguistics, and
-human-computer interaction are concerned with how persuasion is manifested in a
-variety of contexts [@nye2004soft, @martin1995lingpers, @kaptein2009can]. 
-
-```{r get_raw_dat, include=F, echo = F}
-DL_DATA <- FALSE # Load data from MySQL or from disk?
-
-library(tidyverse)
-library(magrittr)
-knitr::opts_chunk$set(echo = F, message = F)
-
-dbcon <- src_mysql("jmcclellanDB", 
-                   host="mpcs53001.cs.uchicago.edu",
-                   username="jmcclellan",
-                   password="udaeTh5b"
-                  )
-if (DL_DATA){
-  cmv_coms <- dbcon %>%
-    tbl("CMV_Comment") %>%
-    collect() %>%
-    filter(content != "[removed]",
-           content != "[deleted]") %T>%
-    write_rds("pre_model_data/cmv_coms.rds")
-  
-  cmv_subs <- dbcon %>%
-    tbl("CMV_Submission") %>%
-    collect() %>%
-    mutate(gave_delta = ifelse(deltas_from_author > 0, 1, 0)) %>%
-    filter(content != "[removed]") %>%
-    mutate(cmv_sub_ind = 1) %T>%
-    write_rds("pre_model_data/cmv_subs.rds")
-  
-  std_subs <- dbcon %>%
-    tbl("Submission") %>%
-    collect() %>%
-    filter(content != "[removed]",
-           content != "[deleted]") %T>%
-    write_rds("pre_model_data/std_subs.rds")
-  
-  cmv_auths <- dbcon %>%
-    tbl("CMV_Sub_Author") %>%
-    collect() %T>%
-    write_rds("pre_model_data/cmv_auths.rds")
-    
-} else {
-  cmv_coms <- read_rds("cmv_coms.rds")
-  cmv_subs <- read_rds("cmv_subs.rds")
-  std_subs <- read_rds("std_subs.rds")
-  cmv_auths <- read_rds("cmv_auths.rds")
-}
-
-```
-
-```{r topic_creation, eval=F, echo=F}
-CREATE_LDA <- FALSE # Create LDA again or load from disk?
-
-# Followed from:
-# https://cran.r-project.org/web/packages/tidytext/vignettes/topic_modeling.html
-library(tidytext)
-library(stringr)
-library(tidyr)
-library(topicmodels)
-if (CREATE_LDA){
-  cmv_subs_col <- cmv_subs %>% collect()
-  
-  by_cmv_sub_word <- cmv_subs_col %>%
-    select(reddit_id, content) %>%
-    unnest_tokens(word, content)
-  
-  word_counts <- by_cmv_sub_word %>%
-    anti_join(stop_words) %>%
-    count(reddit_id, word, sort = TRUE) %>%
-    ungroup()
-  
-  cmv_dtm <- word_counts %>%
-    cast_dtm(reddit_id, word, n)
-  
-  cmv_lda <- LDA(cmv_dtm, k = 7, control = list(seed = 1234))
-  write_rds(cmv_lda, "topic_model.RData")
-} else {
-  cmv_lda <- read_rds("topic_model.RData")
-}
-
-# For the k topics, we create a table with reddit_id of the CMV post as the primary key
-# And the "gamma" score given by the model giving the "probability" that
-# document belongs to a certain topic
-library(glue)
-cmv_lda_doc_top <- tidy(cmv_lda, matrix = "gamma") %>%
-  mutate(topic = paste("topic_", topic, sep = "")) %>%
-  spread(topic, gamma) %>%
-  rename(reddit_id = document)
-
-# Join with cmv submissions
-cmv_subs <- inner_join(cmv_subs, cmv_lda_doc_top)
-```
-
-```{r transform_data}
-library(text2vec)
-prep_fun = function(x) {
-  x %>% 
-    # make text lower case
-    str_to_lower %>% 
-    # remove non-alphanumeric symbols
-    str_replace_all("[^[:alnum:]]", " ") %>% 
-    # collapse multiple spaces
-    str_replace_all("\\s+", " ")
-}
-  browser()
-# subject_authors <- read_rds("subject_authors.RDS")
-
-START_2016 <- 1451606400 # Really should have a better date system in place here. . . 
-END_2016 <- 1483228800
-nth_date <- function(x, order, decrease){
-  u <- unique(x)
-  sort(u, decreasing = decrease)[order]
-}
-
-# CMV Sub authors, their earliest CMV Submission, and the number of CMV Subs
-sub_auths_min_date <- cmv_subs %>%
-  group_by(author) %>%
-  summarise(last_cmv_date = nth_date(date_utc, 1, T),
-            first_cmv_date = nth_date(date_utc, 1, F),
-            tot_cmv_subs = n())
-
-first_cmv_subs <- inner_join(sub_auths_min_date, cmv_subs) %>%
-  filter(date_utc == first_cmv_date)
-
-# Use the min date to do grouping and filtering
-                            # Add a variable to show proportion of past submissions in CMV
-std_subs_info <- inner_join(std_subs %>% mutate(is_cmv_sub = ifelse(subreddit == "r/changemyview", 1, 0)), 
-                            sub_auths_min_date) %>%
-  filter(date_utc < first_cmv_date) %>%
-  inner_join(by = "author", first_cmv_subs %>% select(author, content)) %>%
-  filter(author != "[deleted]") %>%
-  group_by(author) %>%
-  summarise(
-            # Stats from non-CMV submission before first CMV Submission  
-            prev_subs = n(),
-            cmv_sub_prop = sum(is_cmv_sub) / prev_subs, 
-            prev_unique_subs = length(unique(subreddit)),
-            prev_avg_score = mean(score),
-            prev_avg_edits = mean(edited),
-            prev_avg_dcoms = mean(direct_comments),
-            prev_avg_tcoms = mean(total_comments),
-            prev_avg_acoms = mean(author_comments),
-            prev_avg_unique_parts = mean(unique_commentors),
-            prev_avg_score = mean(score),
-            all_text = prep_fun(paste(content.x, content.y, collapse=" ")),
-            sub_text = prep_fun(paste(content.x, collapse=" ")),
-            first_cmv_text = prep_fun(paste(content.y, collapse = " "))
-  ) %>%
-  filter(!(sub_text %in% c("", " ", "  ")))
-```
-
-```{r sim_scores}
-# tfidf = TfIdf$new()
-tfidf = LSA$new(n_topics = 100)
-
-# http://text2vec.org/similarity.html
-vectorizer <- prep_fun(std_subs_info$all_text) %>%
-  itoken(progressbar=F) %>%
-  create_vocabulary() %>%
-  prune_vocabulary(doc_proportion_max = 0.1, term_count_min = 5) %>%
-  vocab_vectorizer()
-
-library(purrr)
-sub_dtm <- std_subs_info$sub_text %>% itoken(., progressbar=F) %>%
-  create_dtm(vectorizer) %>%
-  fit_transform(tfidf)
-
-first_cmv_dtm <- std_subs_info$first_cmv_text %>% itoken(., progressbar=F) %>%
-  create_dtm(vectorizer) %>%
-  fit_transform(tfidf)
-
-par_scores <- psim2(sub_dtm, first_cmv_dtm, method = "cosine", norm = "l2")
-std_subs_info <- std_subs_info %>%
-  mutate(sim_scores = par_scores)
-
-std_subs_info %>% 
-  ggplot(aes(x = sim_scores)) + 
-  geom_histogram(bins = 50)
-```
-
-```{r eval=F}
-cmv_coms_info <- inner_join(cmv_coms, sub_auths_min_date) %>%
-  # Don't count CMV comments posted on their own posts (Impossible to get a delta from yourself!)
-  inner_join(cmv_subs %>% select(author, reddit_id, date_utc, direct_comments, content)
-             %>% rename(sub_auth = author, sub_id = reddit_id, sub_date = date_utc), 
-             by=c("parent_submission_id" = "sub_id")) %>%
-  filter(sub_auth != author) %>%
-  filter(date_utc < first_cmv_date) %>%
-  # filter(!((author %in% subject_authors) & (sub_auth %in% subject_authors))) %>%
-  mutate(cmv_com_ind = 1,
-         direct_reply_ind = ifelse(is.na(parent_comment_id), 1, 0),
-         
-         # Create variable showing the lag time in minutes (originally ms) between
-         # the CMV comment and the original post
-         lag_time = abs((date_utc - sub_date) / (1000 * 60))
-         ) %>% 
-  group_by(author) %>%
-  summarise(
-            prev_cmv_coms = sum(cmv_com_ind),
-            prev_cmv_direct_coms = sum(direct_reply_ind),
-            prev_cmv_avg_OP_deltas = mean(deltas_from_OP),
-            prev_cmv_avg_other_deltas = mean(deltas_from_other),
-            prev_cmv_sub_avg_direct_coms = mean(direct_comments),
-            prev_cmv_com_avg_lag = mean(lag_time),
-            
-  ) %>%
-  mutate(delta_treatment = ifelse(prev_cmv_avg_OP_deltas > 0, 1, 0)) %>% # Only count deltas received from an OP
-  mutate(delta_treatment = factor(delta_treatment, levels=c(0, 1), labels=c("No Delta", "Delta")))
-
-cmv_sub_info <- inner_join(cmv_subs, sub_auths_min_date) %>%
-  filter(date_utc <= last_cmv_date) %>%
-  group_by(author) %>%
-  summarise(
-            prev_cmv_subs = n(),
-            outcome_deltas_given = sum(gave_delta),
-            outcome_delta_rate = outcome_deltas_given / prev_cmv_subs,
-            deltas_from_other = sum(deltas_from_other),
-  )
-
-reg_form <- inner_join(std_subs_info, cmv_coms_info) %>%
-  inner_join(cmv_auths %>% select(user_name, cmv_submissions), by=c("author" = "user_name")) %>%
-  inner_join(cmv_sub_info) %>%
-  filter(author != "[deleted]")
-
-subject_authors <- unique(reg_form$author)
-write_rds(subject_authors, "subject_authors.RDS")
-```
-# Literature Review
-
-## Persuasion and Malleability 
-
-Before the advent of social media websites like Facebook or Reddit, research efforts into
-persuasion (and by extension, malleability) were mostly confined to laboratory settings,
-but thanks to the increasing number of social interactions online, interpersonal persuasion
-has become observable on a massive scale [@fogg2008mass]. Tan et al. explored persuasion in
-r/ChangeMyView, [-@tan2016winning]. CMV is particularly conducive to the study of mass interpersonal
-persuasion, as posters must state the reasoning behind their views, and successful arguments
-must be awarded with explicit confirmation. Thus, the outcome of the persuasion efforts,
-reasoning behind people’s views, and the full interactions are accessible.
-With access to this information, Tan et al. focused primarily on how interaction dynamics and
-choice of language within arguments were associated with a successful change in someone’s
-3
-opinion. A third focus of the study was an attempt to determine the malleability of an
-opinion, i.e. the likelihood that the holder of that opinion would award successful arguments
-to change it. Assuming that at least 10 unique challengers to the opinion were present, and
-that the holder of the opinion responded at least once, Tan et al. analyzed the way in which
-the opinion was presented and attempted to predict whether or not it could be changed.
-This last task, attempting to determine the malleability of an opinion without respect to any
-of the arguments attempting to change it, was difficult indeed, and Tan et al. only achieved
-an out of sample ROC of .54 with their best model. Still, using weighted logistic regression,
-they found some significant features consistent with self-affirmation theory (Cohen, Aronson,
-and Steele 2000; Correll, Spencer, and Zanna 2004).
-
-# Data
-
-## Subjects
-The subjects of interest, specifically, are Reddit users who have participated
-on CMV by posting submissions (their views), but have also participated in CMV
-via comments (attempting to change a view) before their first CMV submission. Of
-these, there are `r nrow(reg_form)` "subject" authors meeting this criteria of
-`r nrow(cmv_auths)` authors in total who posted CMV submissions in 2016. 
-
-## Important variables.
-Our treatment variable, `delta_treatment` is a binary variable indicating
-whether or not the given subject author received a delta in any of their
-previous CMV comments from the original poster of that comment. Also, while this
-is hard to demonstrate in practice, this treatment assignment would seem to be independent 
-of the potential outcomes of `outcome_deltas_given`. After all, if a subject author
-is deciding whether or not responses from the CMV community change his mind,
-they don't explicitly take into account whether or not they themselves had
-received a delta before.
-
-There are a number of factors that can contribute to the `delta_treatment` assignment.
-Perhaps most obviously is the number of attempts (CMV comments) the subject author has made to
-change the opinions of Reddit users. These are represented in the variables `prev_cmv_coms` and
-`prev_cmv_direct_coms`. It is important to determine the subject author's direct
-comments as well as all of their comments. A direct CMV comment replies directly
-to the opinion at hand, while there are those that are more "nested" in the
-discussion such as replies of replies of direct replies. While the OP of a CMV
-submission is free to award nested comments with a delta, they are far more
-likely to award direct comments a delta.
-
-Some topics are more contentious than others, and given the diverse subject
-matter on CMV. The subject authors might be attempting to change the opinion
-concerning a humorous topic, nascent social issues, or something inspired from
-the news-cycle at the time. To account for this, I create a Latent Dirichlet
-Allocation (LDA) topic model that assumes 7 different topics are present in *all* 
-the CMV submissions gathered in the data. Each CMV submission is then given a
-score  for each of the 7 topics ($0 \leq \gamma_k \leq 1 | k={1...7} | \sum \gamma_k = 1$).
-For each subject author, the average of the 7 topic scores for all the
-submissions they commented on is recorded (`prev_topic_{k}_score`).
-
-The quality and timing of the dicussion can also impact `delta_treatment`. In this study,
-discussion quality is flattened into `prev_cmv_sub_avg_direct_coms`. It is important
-to have a measure of discussion quality as one can imagine that the lack (or excess) of
-direct comments for a given opinion might raise or lower the subject author's
-chances of having their own comment awarded a delta. As for timing, previous research
-has shown that comments made earlier in the life of a submission are more likely to receive a delta @tan2016winning. Thus, the average lag time between the CMV submissions and the CMV comments is present as `prev_cmv_com_avg_lag` (minutes).
-
-# Propensity Score Stratification
-
-## Preliminary View
-
-Because I am interested in the effect of `delta_treatment` on
-`outcome_delta_rate`, but since `delta_treatment` assignment can be affected by
-some variables (as discussed above), I utilize propensity score stratification
-to try and discern the average treatment effect (ATE).
-
-Below is a basic table showing the difference in the `outcome_delta_rate`
-between the two `delta_treatment` groups: "Delta" and "No Delta". There is also
-a basic t-test between these two groups, showing a statistically significant
-difference between the means of `outcome_delta_rate` between the two groups.
-
-```{r prop_score_strat}
-# Based off of
-# https://sejdemyr.github.io/r-tutorials/statistics/tutorial8.html
-library(MatchIt)
-theme_set(theme_minimal())
-
-reg_form %>%
-  group_by(delta_treatment) %>%
-  summarise(n_redditors = n(),
-            mean_delta_rate = mean(outcome_delta_rate),
-            std_error = sd(outcome_delta_rate) / sqrt(n_redditors))
-
-with(reg_form, t.test(outcome_deltas_given ~ delta_treatment))
-```
-
-## Investigate Covariates  
-
-In the data section, I discussed the potential of 11 covariates having affects
-on `delta_treatment`. Even with a visual inspection, the variables `prev_cmv_coms`, `prev_cmv_direct_coms`, `prev_cmv_sub_avg_direct_coms`, `prev_cmv_com_avg_lag` seem to have different means across the two treatment groups.
-
-```{r pcovs}
-reg_form_cov <- c("prev_cmv_coms", "prev_cmv_direct_coms", "prev_cmv_sub_avg_direct_coms", "prev_cmv_com_avg_lag",
-                  "prev_topic_1_score", "prev_topic_2_score", "prev_topic_3_score",
-                  "prev_topic_4_score", "prev_topic_5_score", "prev_topic_6_score") # Full
-# reg_form_cov <- c("prev_cmv_sub_avg_direct_coms", "prev_cmv_com_avg_lag", "prev_topic_3_score") # Filtered (sensitvity)
-reg_form %>%
-  group_by(delta_treatment) %>%
-  select(one_of(reg_form_cov)) %>%
-  summarise_all(funs(mean(., na.rm = T)))
-```
-
-Utilizing t-tests for each variable between the two groups we see that a number
-of covariates whose means have (95%) statistically significant differences between
-the values of `delta_treatment`. 
-
-```{r pcov_t, warning=FALSE}
-library(purrr)
-library(knitr)
-kable(
-  with(reg_form, 
-    map_dfr(reg_form_cov, function(v) {
-      require(glue)
-      test_results <- t.test(unlist(reg_form[, v]) ~ delta_treatment)
-      pval <- test_results$p.value
-      if (pval > .05){
-        sig <- "Not Significant (95%)"
-      } else {
-        sig <- "Significant (95%)"
-      }
-        as.data.frame(list(covar = v, p_value = pval, significant = sig))
-    })
-  )
+(expl$plots$coms_by_sub_by_hour +
+   labs(title = "2016 r/CMV Submission Comment Activity",
+        subtitle = "By Hour of the Day (24 hours UTC)",
+        x = "Hour",
+        y = "Comments Made per CMV Submission"
+        ) +
+   geom_smooth(method = "lm")
 )
 ```
 
-## Estimate Propensity Score
+### Community Norms
 
-The propensity score will be estimated using a logit model of `delta_treatment`
-on the aforementioned important covariates.
+Like many subreddits, r/ChangeMyView has a [variety of rules when it comes to submitting
+or commenting.](https://www.reddit.com/r/changemyview/wiki/rules). In some cases,
+subject authors may have attempted to post an opinion submission on CMV, only to
+have it removed due to rule violations. Because these removed opinions cannot be
+changed, they are not counted as the subject author's "first" opinion
+submission. However, they do provide useful information as to how well the subject
+author can conform to CMV's rules. In the coefficient plot, the number of removed
+CMV submissions before the subject author's first "successful" one has a significant
+negative effect on malleability. This effect has the largest magnitude under 
+the full model.
 
-```{r est_prop_score, warning=FALSE}
-form <- as.formula(paste("delta_treatment ~ ", paste0(reg_form_cov, collapse = " + ")))
+Because submissions can be removed for a variety of reasons, one cannot say with
+certainty what the significance of this variable points to. Submissions can be 
+removed if a user responds and the subject author, (the OP) does not respond within 
+3 hours. If submission were removed for this reason, perhaps the subject author's
+innate level of engagement could be the state measured by this variable. Posts
+can also be removed for being too short, not expressing a neutral stance, or playing
+devil's advocate. In a number of cases, community moderators cite specific rules
+broken when removing a post, and the classification of removed CMV posts based on
+such information provides an obvious but likely fruitful direction for further
+study in this area.
 
+### Submission History Timing/Concentration
 
-m_ps <- glm(form, family=binomial(), data=reg_form)
-summary(m_ps)
+Much of this paper has treated subject author submission history as occurring simply
+"within" a blockoff time, with the first CMV opinion and cutoff dates serving as
+bounds. However, between subject authors, submission histories are concentrated 
+further or closer to their first CMV opinion. The [(AH) Average Previous Submission Date](#Average-Previous-Submission-Date) introduces
+some of this information into the model.
+
+For the past model, this variable has a positive significant effect on opinion
+malleability, i.e. *closer* histories to the first CMV opinion increase the odds
+of an opinion changing. However, this effect becomes just insignificant in full
+model, lowering  the confidence one can have in such an effect. However, the
+average previous submission date, like many author history variables, is highly
+susceptible to changes in history cutoff. For this variable especially, because means
+are susceptible to outliers, large swings in its value are possible as submissions
+nearby the cutoff are included or ignored.
+
+## "Cohort" Approach
+
+```{r cohort}
+ci_vals <- comp_cohort_cis()
 ```
-
-Also, interestingly enough, the only significant elements of
-this logistic model (95%) are: `prev_topic_3_score`, `prev_cmv_com_avg_lag`, 
-and `prev_cmv_sub_avg_direct_coms`. In other words, it appears that, when
-controlling for the aforementioned important variables, it appears that earlier
-comments, attempting to change the opinion of certain topics, when there are
-fewer direct replies leads to a higher predicted probability of `delta_treatment`.
-
-## Examine Common Support
-
-```{r apply_ps}
-library(modelr)
-logit2prob <- function(x){
-  (exp(x) / (1 + exp(x)))
-}
-
-reg_form <- reg_form %>%
-  add_predictions(m_ps) %>%
-  mutate(prob = logit2prob(pred))
-
-
-reg_form %>%
-  ggplot(aes(x = prob)) +
-  geom_histogram(bins = 10) + 
-  facet_wrap(as.formula(paste("~", "delta_treatment"))) +
-  xlab("Prop-Score") +
-  labs(title = "Propensity Score by Treatment Group")
-  
-```
-
-Looking at this histogram, one can see that the task of predicting
-`delta_treatment` as "Delta" appears to be difficult (assuming a 50% probability
-cutoff). However, there does appear to be a viable region of common support, as
-we can see in the table below.
-
-```{r support_table}
-(support_table <- reg_form %>%
-  group_by(delta_treatment) %>%
-  summarise(count = n(), min_prob = min(prob), max_prob = max(prob)))
-```
-
-There are `r 644 + 109` observations in total, but those falling outside of the
-common support will be omitted during the stratification procedure.
-
-## Stratification
-
-Utilizing R's `MatchIt` (@matchit) package we utilize the propensity score calculated above
-to stratify the sample into 3 separate subclasses. While this is unfortunately
-fewer than I would have liked, but after removing observations falling outside
-the common support there are only `604` left. Even with the reduced number of
-strata some balance statistics are still not ideal.
-
-```{r matching_alg, warning=F, message=F}
-# reg_form_cov <- c("prev_unique_subs", "prev_avg_edits", "prev_cmv_coms", "prev_avg_score")
-# reg_form_cov <- c("prev_avg_edits")
-reg_form_nomiss <- reg_form %>%  # MatchIt does not allow missing values
-  mutate(delta_treatment = ifelse(delta_treatment == "No Delta", 0, 1)) %>%
-  na.omit()
-form <- as.formula(paste("delta_treatment ~ ", paste0(reg_form_cov, collapse = " + ")))
-
-# Have binary coding!
-mod_match <- matchit(form,
-                     method = "subclass", data = reg_form_nomiss,
-                     subclass = 3,
-                     discard = "both",
-                     reestimate = F
-                     )
-dta_m <- match.data(mod_match)
-t <- summary(mod_match, standardize = T)
-
-(t$sum.matched)
-(t$qn)
-ot <- plot(mod_match, type = "jitter")
-(ot)
-```
-
-These strata are definitely not of equal size, at least between strata
-(subclasses). Only subclass #3 has it's treatment/control split approximately
-equal. Additionally, looking at the balance statistics for certain covariates is
-concerning. However, since I am doing propensity score stratification, I am more
-concerned with the balance for the propensity score, which is `distance` above, 
-and the statistics concerning it compare favorably to the covariates that help comprise it. ([Legend for balance statistics.](https://r.iq.harvard.edu/docs/matchit/2.4-20/The__TT_summary_TT__Co.html))
-
-Additionally, a "jitter" plot showing the propensity scores of units matched into a strata and those that were not (i.e. those outside the common support), is provided.
-
-# Average Treatment Effect Estimation
-
-Now, I utilize the R package `Zelig` (@zelig) to estimate the ATE across each subclass
-with a 95% confidence interval. Our outcome of interest is
-`outcome_deltas_given`, which indicates the number of deltas each subject author
-awarded in their CMV submissions *after* their period of CMV comments which I
-utilized to calculate their propensity score.
-
-```{r zelig_ate, message=FALSE, warning=F}
-library(Zelig)
-
-check_form <- paste("outcome_deltas_given ~ delta_treatment + ",
-                    paste0(reg_form_cov, 
-                           "+ prev_cmv_subs", collapse = " + "))
-zelig.out <- zelig(check_form, data = match.data(mod_match),
-                   by = "subclass", model = "ls",
-                   cite = F)
-
-x.out1 <- setx(zelig.out, data = match.data(mod_match, "delta_treatment"), 
-               fn = NULL, cond = TRUE)
-s.out1 <- sim(zelig.out, x = x.out1, y = "outcome_deltas_given")
-(sum <- summary(s.out1))
-```
-
-The key take away from the above (admittedly cluttered) figure are the `2.5%`
-and `97.5%` numbers under `pv` (predicted value). These are `Zelig`'s way of
-indicating the 95% confidence interval for the ATE on `outcome_deltas_given`.
-Note that none of these confidence intervals indicate a statistically significant 
-effect. Additionally, because `outcome_deltas_given` inherently relies on the number 
-of CMV submissions the subject authors made, we include it as a variable when estimating the ATE.
-
-# Shortcomings and Design Decisions
-
-Unfortunately, even as I was trying to push this observational data towards
-something more quasi-experimental, I realized I had a lot of leeway in how
-exactly I framed the problem and the elements comprising it.
-
-## Treatment Definition and Effect
-
-`delta_treatment`, though defined as a binary treatment variable, actually
-flattens any value of deltas received above 1 to 1. That is, the treatment is
-more accurately defined as an ordinal multi-valued treatment, as it is possible
-for the subject authors to receive anywhere 0 to the number of CMV comments they
-made deltas before they began their own CMV submissions. However, given the 
-relative sparsity of higher valued deltas, I elected to binarize the treatment.
-Binarization also made things like propensity score stratification less complicated. 
-
-## Missing Data
-
-Reddit Submissions can be "live" for a period of 6 months before further activity
-on the submission (editing, new comments) is suspended, effectively "archiving"
-the it. Within that 6 month period, however, comments and submissions can either 
-be deleted by the user, or removed by moderators of a subreddit for violating
-rules. When gathering the data used for this exercise, I ensured that all
-submissions utilized in the data were over 6 months old, eliminating the
-possibility of new activity. Unfortunately, a not-insignificant amount of
-submissions and comments gathered were either deleted or removed, eliminating the link 
-back to their original authors. It would be naive to think that this pattern of 
-missing data is random in nature, and thus this leaves one of a few sore marks
-on this paper.
-
-Additionally, there are many more CMV submissions and comments available for 
-inference. I was unable to gather these due to time constraints, but gathering them may have allowed for a greater number of strata, or at least more balanced strata.
-
-## Stable Unit Treatment Value Assumption (SUTVA)
-
-This requires that the potential outcome (`outcome_deltas_given`) of one unit
-is not affected by the particular treatment assignment (`delta_treatment`) of
-other units. However, it is quite easy to think of a counter-example in which
-this assumption is violated.
-
-There are two subject authors, `S0` and `S1`, `S0` actively posted CMV comments
-from `time = 0` to `time = 5` while `S1` actively posted CMV submissions over the
-same period. If `S0` posted comments on *any* of `S1`'s submissions, then (SUTVA)
-is violated, because `S1`'s `outcome_deltas_given` then has direct interaction
-with `S0`'s `delta_treatment` value.
-
-```{r sutva_investigate}
-sutva_info <- inner_join(cmv_coms, sub_auths_min_date) %>%
-  # Don't count CMV comments posted on their own posts (Impossible to get a delta from yourself!)
-  inner_join(cmv_subs %>% select(author, reddit_id, date_utc, direct_comments,
-                                 topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7) 
-             %>% rename(sub_auth = author, sub_id = reddit_id, sub_date = date_utc), 
-             by=c("parent_submission_id" = "sub_id")) %>%
-  filter(sub_auth != author) %>%
-  filter(date_utc < first_cmv_date)
-
-
-sutva_violations <- sutva_info %>%
-  filter((author %in% subject_authors) & (sub_auth %in% subject_authors))
-
-perct <- round(100 * nrow(sutva_violations) / nrow(sutva_info), 2)
-```
-
-Just how prevalent is this problem? Among the `r nrow(sutva_info)` total CMV comments
-used to create information on the subject author's, `r nrow(sutva_violations)`
-of these comments (`r perct`%) violate the SUTVA assumption. Out of the `r nrow(reg_form)` subject authors in the analysis,
-`r length(unique(sutva_violations$author))` have violating comments.
-
-```{r}
-reg_form %>%
-  ggplot(aes(x = prev_cmv_coms)) +
-  geom_density() + 
-  labs(title = "Subject author's previous CMV Comments")
-```
-
-While it's possible to remove the CMV comments that violate the SUTVA assumption,
-there are so many subject authors with only a single CMV comment, that doing this
-thins the data too much, such that only 2 or fewer strata can be utilized, leaving too much selection bias in the problem. At the same time, this does not significantly affect the results from above, as there is still no evidence of `delta_treatment` having a significant effect on `outcome_deltas_given`.
-
-## CMV Submission Content/Topic
-
-Given that one of the central topics of this paper is the changing of opinions (via receiving and giving deltas), the topics and content of the opinions would definitely have an impact on how difficult they may be to change. Before, I mentioned that each of the CMV Submissions the subject authors commented on was given 7 "topic scores" using LDA topic modelling in an attempt to shed some light on the subject matter, this in turn was integrated into the propensity score. Additionally, I experimented (as a sort of rough sensitivty analysis) with changing the number of assumed topics (`k`), as well as including the average topic scores of each subject author's CMV Submissions as a control variable in the calculation of ATE. However prudent any of these experiments may have been there was still no change in the non-significant takeaway result.
-
-Topic modelling is not the only way to glean information from the content of a CMV Submission. @tan2016winning utilized Markdown syntax, pronoun types, link types, and the number of paragraphs, among others. Such features would have been useful to have, especially given the past history of using propensity score measures with hundreds of covariates! Unfortunately, I am one person, and not 4 from Cornell.
-
-## User Identification and Demographics
-
-Because new Reddit accounts can be created relatively quickly, there is no 
-guarantee that the number of subject authors is exactly the number of unique
-individuals in the study. That is, some subject authors that may have otherwise
-been subject authors were not counted as such because they split up their
-previous CMV comments to one account and their submissions to another (or
-vice-versa). Unlike more traditional sociological studies utilizing causal
-inference methods, I have little reliable information that identifies and
-characterizes the subject authors.
 
 # Conclusion
 
-In this paper I attempted to utilize data present in r/ChangeMyView, a unique
-community of Reddit, and propensity score stratification, to find evidence of
-reciprocation in opinion malleability. However, given the observational nature
-of the data, the sparcity stemming from the way in which I chose to frame the
-problem (treatment/outcome), and the actual scale of the NLP problem, I found
-the task rather difficult.
+## Limitations
 
-My final result was able to utilize a lower number of strata than I would have
-liked, letting some bias remain. Without knowing the nature of that bias, I am
-a little wary of both the null result, and any changes brought about by
-sensitivty analysis, which in this case (not shown) was simply including quadratic terms and
-interactions of variables with differing variances and correlations, between the treatment groups.
-
-Even with my disappointment I have a newfound respect of the precision and
-diligence required to utilize causaul inference methods with more experimental and more traditional data.
-
-\newpage
+## Extensions
 
 # Appendix
 
@@ -1305,6 +811,19 @@ of interest and a few other variables that are included in a  model that
 serves to benchmark the effectiveness of Pre Debate + Author History model. For 
 a more thorough examination of "Post Debate" and debate dynamics in general in 
 CMV, please see (@tan2016winning).
+
+However, simply because these variables are gathered after the debate and
+archiving process have taken place, this does not mean that the information
+gathered has no bearing of characteristics that may have affected the subject author's decision making or the debate itself.
+
+For example, measuring how many times the subject author commented on their
+first opinion submission, while only identifiable after the debate is finished
+and the post is archived, one could think of this variable as partially measuring the
+propensity of the author to engage and debate with other Redditors. Surely, some
+of this characteristic is determined by the quality and subject matter of the
+comments that "draw out" the subject author's engagement, but some of it must be
+an aspect of the author that he or she had before the debate, as well, as
+during, and after it.
 
 #### Opinion Change?
 

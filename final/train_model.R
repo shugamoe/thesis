@@ -127,7 +127,7 @@ train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
     return()
   }
   
-  model_dat <- revamp_cols(read_data(lsa_topics, lda_topics, max_days_between, tag),
+  model_dat <- revamp_cols(read_data(lsa_topics, lda_topics, max_days_between, tag = tag),
                            days_between = max_days_between)
   
   registerDoMC(3)
@@ -238,7 +238,7 @@ all_train_models <- function(lsa_topics = LSA_TOPICS, lda_topics = LDA_TOPICS,
   source("master_vars.R")
   
   input_list <- as.list(expand.grid(lsa_topics = lsa_topics, lda_topics = lda_topics,
-                      max_days_between = DAYS_BETWEEN, tag = tag))
+                      max_days_between = max_days_between, tag = tag, stringsAsFactors = F))
   input_list$num_folds <- rep(K, length(input_list[[1]]))
   input_list$num_repeats <- rep(REPEATS, length(input_list[[1]]))
   

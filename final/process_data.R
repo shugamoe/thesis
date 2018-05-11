@@ -429,39 +429,40 @@ process_data <- function(lsa_topics = CHOICE_LSA,
   std_subs_info <- std_subs_info %>% inner_join(auth_sub_text_info) %>%
     inner_join(auth_cmv_text_info)
   
-  # Attempt to retrieve previous CMV Comment info
-  cmv_coms_info <- inner_join(cmv_coms, sub_auths_min_date) %>%
-    # Don't count CMV comments posted on their own posts (Impossible to get a delta from yourself!)
-    inner_join(cmv_subs %>% select(author, reddit_id, date_utc, direct_comments, content)
-               %>% rename(sub_auth = author, sub_id = reddit_id, sub_date = date_utc), 
-               by=c("parent_submission_id" = "sub_id")) %>%
-    filter(sub_auth != author) %>%
-    filter(date_utc < first_cmv_date) %>%
-    # filter(!((author %in% subject_authors) & (sub_auth %in% subject_authors))) %>%
-    mutate(cmv_com_ind = 1,
-           direct_reply_ind = ifelse(is.na(parent_comment_id), 1, 0),
-           
-           # Create variable showing the lag time in minutes (originally ms) between
-           # the CMV comment and the original post
-           lag_time = abs((date_utc - sub_date) / (1000 * 60))
-           ) %>% 
-    group_by(author) %>%
-    dplyr::summarise(
-              prev_cmv_coms = sum(cmv_com_ind),
-              prev_cmv_direct_coms = sum(direct_reply_ind),
-              prev_cmv_avg_OP_deltas = mean(deltas_from_OP),
-              prev_cmv_avg_other_deltas = mean(deltas_from_other),
-              prev_cmv_sub_avg_direct_coms = mean(direct_comments),
-              prev_cmv_com_avg_lag = mean(lag_time)
-    )
-  
-  std_subs_info <- std_subs_info %>%
-    left_join(cmv_coms_info) %>%
-    dplyr::select(-contains("text")) %>%
-    mutate(prev_cmv_participation = ifelse(prev_cmv_coms > 0, 1, 0))
-  std_subs_info[is.na(std_subs_info)] <- 0 # Replace all NAs with 0
-  # rm(list=setdiff(ls(), "std_subs_info"))
+  # # Attempt to retrieve previous CMV Comment info
   # browser()
+  # cmv_coms_info <- inner_join(cmv_coms, sub_auths_min_date) %>%
+  #   # Don't count CMV comments posted on their own posts (Impossible to get a delta from yourself!)
+  #   inner_join(cmv_subs %>% select(author, reddit_id, date_utc, direct_comments, content)
+  #              %>% rename(sub_auth = author, sub_id = reddit_id, sub_date = date_utc), 
+  #              by=c("parent_submission_id" = "sub_id")) %>%
+  #   filter(sub_auth != author) %>%
+  #   filter(date_utc < first_cmv_date) %>%
+  #   # filter(!((author %in% subject_authors) & (sub_auth %in% subject_authors))) %>%
+  #   mutate(cmv_com_ind = 1,
+  #          direct_reply_ind = ifelse(is.na(parent_comment_id), 1, 0),
+  #          
+  #          # Create variable showing the lag time in minutes (originally ms) between
+  #          # the CMV comment and the original post
+  #          lag_time = abs((date_utc - sub_date) / (1000 * 60))
+  #   ) %>% 
+  #   group_by(author) %>%
+  #   dplyr::summarise(
+  #             prev_cmv_coms = sum(cmv_com_ind),
+  #             prev_cmv_direct_coms = sum(direct_reply_ind),
+  #             prev_cmv_avg_OP_deltas = mean(deltas_from_OP),
+  #             prev_cmv_avg_other_deltas = mean(deltas_from_other),
+  #             prev_cmv_sub_avg_direct_coms = mean(direct_comments),
+  #             prev_cmv_com_avg_lag = mean(lag_time)
+  #   )
+  # 
+  # std_subs_info <- std_subs_info %>%
+  #   left_join(cmv_coms_info) %>%
+  #   dplyr::select(-contains("text")) %>%
+  #   mutate(prev_cmv_participation = ifelse(prev_cmv_coms > 0, 1, 0))
+  # std_subs_info[is.na(std_subs_info)] <- 0 # Replace all NAs with 0
+  # # rm(list=setdiff(ls(), "std_subs_info"))
+  # # browser()
   
   
   # Return model ready info
@@ -475,9 +476,11 @@ all_process_data <- function(lsa_topics = LSA_TOPICS,
                              tag = ""){
   require(purrr)
   source("master_vars.R")
-  
+    
   as.list(expand.grid(lsa_topics = lsa_topics, lda_topics = lda_topics,
-                      max_days_between = max_days_between, tag = tag)) %>%
+                      max_days_between = max_days_between, tag = tag,
+                      stringsAsFactors = F
+                      )) %>%
     pwalk(process_data)
 }
 
