@@ -557,9 +557,9 @@ perhaps be interpreted as black-white race related questions, while Topic 6 is a
 little more difficult to interpret, consisting of many male pronouns.
 
 Given the self-selecting nature of r/ChangeMyViews users, it is interesting to see 
-increased malleability associated with black white race relations, but decreased
-when it comes to (perhaps) "male" issues. However, give the 18-29 male skew of the 
-Reddit userbase as a whole, maybe this is not so surprising (@pew2013)
+increased malleability associated with black-white race relations, but decreased
+when it comes to (perhaps) "male" issues. However, given the 18-29 male skew of the 
+Reddit userbase as a whole, maybe this is not so surprising (@pew2013).
 
 ```{r}
 knitr::kable(expl$tables$top_words[c(1, 6)])
@@ -709,7 +709,24 @@ cohort_graphs[[2]]
 cohort_graphs[[7]]
 cohort_graphs[[14]]
 ```
+```{r cohort_sub_age}
+sub_age <- read_rds("model_data/cohort_{cohort_num}_sub_age_mdb_{max_days_between}.rds")
 
+sub_age.gb <- sub_age %>% 
+  dplyr::group_by(day_age) %>%
+  dplyr::summarise(n = n(),
+                   n_per_auth = n / cohort_size
+                   )
+
+sub_age %>%
+  ggplot(aes(day_age)) +
+    geom_line(stat = "density")
+
+sub_age.gb %>% 
+  ggplot(aes(day_age, n_per_auth)) + 
+    geom_line() + 
+    geom_smooth()
+```
 
 # Conclusion
 
