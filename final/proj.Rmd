@@ -369,31 +369,26 @@ count_subjects <- function(){
   require(tidyverse)
   
   model_dat_fps <- list.files("model_data/", pattern = "^model_dat_db.*[^_30].rds$")
-  
-  days <- str_match(model_dat_fps, "db_([\\d]{1,5})_ltv")[,2] %>%
-    as.integer() %>%
-    unique() %>%
-    sort() 
-  
   # Select random model dats to read subject counts from
   
   # T/F "maps" tracking where each day between value is, only need one
-  day_locs <- days %>%
+  day_locs <- sort(DAYS_BETWEEN) %>%
     map_int(
-      ~sample(which(str_detect(model_dat_fps, glue("db_({.})_"))), 1)
+      ~sample(which(str_detect(model_dat_fps, glue("db_({..1})_"))), 1)
       )
   
   
   subject_count <- model_dat_fps[day_locs] %>%
     map_int(~nrow(read_rds(glue("model_data/{.}"))))
   
-  rtn_tib <- tibble(history_cutoff = days, subject_count = subject_count) 
+  rtn_tib <- tibble(history_cutoff = sort(DAYS_BETWEEN), subject_count = subject_count) 
 }
-
-subject_counts <- count_subjects()
 ```
 
 ### Introducing A "Cohort" Approach
+```{r get_cohort_size}
+cohort_size <- nrow(read_rds("model_data/model_dat_db_270_ltv_150_ldatv_9_30.rds"))
+```
 
 All of the author history variables (AH) are highly dependent on the
 aforementioned submission history cutoff, or more specifically, for a given
@@ -414,15 +409,36 @@ subject authors for modelling, making comparison of models run with different
 cutoffs more difficult. To more directly address the issues of time and submission
 history, I use a "Cohort" approach, which fixes the subject author's initially
 in the shortest submission history cutoff (30 days), and keeps these authors while
-adjusting that cutoff to 60 days, 90 days, 180 days, and beyond.
+adjusting that cutoff to 60 days, 90 days, 180 days, and beyond. Under the
+Cohort approach, the sample size remains constant at `r cohort_size`, as opposed
+to the varying sample size under the standard approach (see figure below). In
+effect, this approach acts as a sort of brute force, weighting scheme with $0, 1$
+weights for a subject author's submissions.
 
-In utilizing a "Cohort" approach, the signifiance of many of the author history 
+```{r varying_sample_size}
+subject_counts <- count_subjects()
+subject_counts %>%
+  dplyr::rename(Cutoff = history_cutoff, Subjects = subject_count) %>%
+  ggplot(aes(Cutoff, Subjects)) + 
+    geom_line() + 
+    labs(title = "Standard Approach Subject Counts",
+         subtitle = "By Varying Submission History Cutoff",
+         x = "Submission History Cutoff",
+         y = "Subject Authors"
+         ) + 
+    geom_hline(aes(yintercept = cohort_size), linetype = 2) + 
+    geom_text(aes(0, cohort_size,label = "Cohort Approach Sample Size", vjust = -1, hjust = -1)) + 
+    geom_hline(aes(yintercept = nrow(expl$model_dat)), linetype = 2) + 
+    geom_text(aes(0, nrow(expl$model_dat), label = "Standard Approach Sample Size", vjust = -1, hjust = -1))
+```
+
+In utilizing a "Cohort" approach, the signifiance of many of the author history (AH) 
 features can be more thoroughly analyzed. The standard approach that I have previously
 described, with fixed values of `K`, `J`, and cutoff, can still be analyzed, and
 variable significance can still be determined, but one can have more confidence of 
 the link between variables should they pass through the gauntlet of signifiance
-in the standard past model, the standard full model, and finally, by means of a 
-permutation test to help determine significance in the "Cohort" approach.
+in the standard past model, the standard full model, and finally, under the evaluation
+of the "cohort" approach.
 
 # Results
 
@@ -641,9 +657,59 @@ nearby the cutoff are included or ignored.
 
 ## "Cohort" Approach
 
+Recall that with the cohort approach, instead of varying the subject author sample
+size with the submission history cutoff, I instead fix the subject authors as those
+who had at least 1 submission within 30 days of their first CMV submission, and then 
+adjust the amount of their submission history to include, altering the author history
+variables. While the results of cohort approach aren't *directly* comparable to that
+of the standard approach with its larger sample of subject authors and fixed
+submission history, the cohort approach offers a more nuanced evaluation to author
+history (AH) variables. For instance, although [(AH) Average Previous Submission Date](#Average-Previous-Submission-Date),
+was found to be just insignificant in the full model in the standard approach,
+the cohort approach tells provides some new insight, as seen below.
+
 ```{r cohort}
-ci_vals <- comp_cohort_cis()
+ci_vals <- comp_cohort_cis() %>%
+  mutate(sig_tf = ifelse(sig == "red", F, T))
+
+graph_cohort_cis <- function(ci_vals, var){
+  require(glue)
+  col <- as.character(ci_vals$sig)
+  names(col) <- as.character(ci_vals$sig_tf)
+  rv <- ci_vals %>%
+    dplyr::filter(Coefficient == var) %>%
+    ggplot(aes(x = factor(db))) +
+      geom_linerange(aes(ymin = LowInner, ymax = HighInner, color = sig_tf)) + 
+      labs(x = "Submission History Cutoff (Days | Not to Scale)",
+           y = "95% CI for Log Odds Effect",
+           title = glue("CIs for {var}"),
+           subtitle = "Varying Submission History Cutoff Under the Full Model",
+           color = "Significant?"
+           ) + 
+    scale_color_manual(values=col)
+}
+
+# [1] mean date
+
+cohort_graphs <- unique(ci_vals$Coefficient) %>%
+  map(~graph_cohort_cis(ci_vals = ci_vals, var = .))
+cohort_graphs[[1]]
 ```
+With this figure it's apparent that under the full model, lower cutoffs for submission
+history result in significant effects for this variable, though, there is even a curious
+change in direction when adjusting the cutoff from 30 to 60 days. While the results of this 
+figure aren't conclusive evidence, one can at least see that the average
+submission date (i.e. distance from the subject author's first opinion) is
+more relevant for the given cohort until the cutoff expands.
+
+### Reinforcing Previous Findings
+
+```{r}
+cohort_graphs[[2]]
+cohort_graphs[[7]]
+cohort_graphs[[14]]
+```
+
 
 # Conclusion
 
@@ -863,5 +929,7 @@ parent is not the opinion submission itself. These comments reply to other comme
 whether they be direct comments, OP comments, or arbitrarily nested comments in a 
 comment tree. This feature helps to flesh out the "debates within the debates" that
 take place in a CMV post.
+
+## Notes on the "Cohort" Approach
 
 # Citations

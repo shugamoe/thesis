@@ -296,10 +296,34 @@ process_data <- function(lsa_topics = CHOICE_LSA,
                  ) %>%
       filter(author != "[deleted]") %$%
       unique(author)
+    
     cohort_tib <- tibble(author = cohort)
     
     # Remove non cohort 
-    std_subs_info <- std_subs_info %>% inner_join(cohort_tib)
+    std_subs_info <- std_subs_info %>% 
+      inner_join(cohort_tib)
+    
+    # For the cohort, come up with the age of their submission histories
+    cohort_info <- std_subs_info %>%
+      mutate(
+             posix.s = as.POSIXct(date_utc, origin = "1970-01-01"),
+             posix.c = as.POSIXct(first_cmv_date, origin = "1970-01-01"),
+             date.s = as_date(posix.s),
+             date.c = as_date(posix.c),
+             
+             # Calculate difference in days between first cmv post and each submission
+             day_age = as.integer(date.c - date.s)
+      )
+    min_max_sage <- tibble(day_age = min(cohort_info$day_age):max(cohort_info$day_age))
+    # sub_age <- cohort_info %>%
+    #   dplyr::group_by(day_age) %>%
+    #   dplyr::summarise(n = n())
+    # sub_age <- left_join(min_max_sage, sub_age) %>%
+    #   mutate(n = ifelse(is.na(n), 0, n),
+    #          n_per_sauth = n / length(cohort)
+    #          )
+    sub_age <- tibble(day_age = sort(cohort_info$day_age))
+    write_rds(sub_age, "model_data/cohort_{cohort_num}_sub_age_mdb_{max_days_between}.rds")
   }
   
   

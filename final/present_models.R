@@ -168,19 +168,40 @@ comp_cohort_cis <- function(tag = TAG){
   removed <-  unique(ci_vals$Coefficient[str_detect(ci_vals$Coefficient, "Removed CMV Subs")])
   
   ci_vals <- ci_vals %>%
-    mutate(Coefficient = ifelse(Coefficient %in% cutoff
-                                ifelse(str_detect(Coefficient, "Submissions within"),
-                                       "Submissions within cutoff before 1st CMV Post",
-                                       ifelse(str_detect(Coefficient, "Removed CMV Subs"),
-                                              "Removed CMV Subs within cutoff before 1st CMV Post"
-                                              )
-                                       ), Coefficient
+    mutate(Coefficient = ifelse(Coefficient %in% cutoff, "(AH) # Submissions with Content before Cutoff",
+                                ifelse(Coefficient %in% num_subs, "(AH) # Submissions within Cutoff before 1st CMV Post",
+                                       ifelse(Coefficient %in% removed, "(AH) # Removed CMV Subs within Cutoff before 1st CMV Post", Coefficient)
                                 )
-           )
+                         )
+    ) %>%
+    filter(grepl("^\\(AH\\)", Coefficient)) %>%
+    mutate(sig = ifelse((LowInner < 0) & (0 < HighInner), "red", "green"))
   
-  browser()
-    
   (ci_vals)
+}
+
+comp_cohort_rocs <- function(tag = TAG){
+  cohort_num <- as.integer(str_extract(tag, "[\\d]{1,}"))
+  
+  results_dat <- CH_DB %>% map(~read_models(max_days_between = ..1, tag = tag))
+  results_dat <- results_dat %>% map2(CH_DB, ~ as_tibble(resamples(..1)$values) %>%
+                                 select(-Resample) %>%
+                                 mutate(max_days_between = ..2,
+                                        cohort_num = cohort_num
+                                        )
+                                ) %>%
+    bind_rows()
+  roc_ci <- results_dat %>%
+    group_by(max_days_between) %>%
+    dplyr::summarise(
+              base_bci = quantile(`model.base~ROC`, .025),
+              base_tci = quantile(`model.base~ROC`, .975),
+              past_bci = quantile(`model.past~ROC`, .025),
+              past_tci = quantile(`model.past~ROC`, .975),
+              full_bci = quantile(`model.full~ROC`, .025),
+              full_tci = quantile(`model.full~ROC`, .975)
+              )
+  browser()
 }
 
 # 
