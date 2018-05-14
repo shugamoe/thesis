@@ -123,7 +123,7 @@ train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   
   out_fp <- glue("model_results/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}{tag}.rds")
   if (file.exists(out_fp)){
-    print(as.character(glue("Skipping (exists) '{out_fp}'")))
+    message(as.character(glue("Skipping (exists) '{out_fp}'")))
     return()
   }
   
@@ -163,7 +163,7 @@ train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   
   
   # Train first model version (base model)
-  print("Training Base Model. . . ")
+  message("Training Base Model. . . ")
   set.seed(69)
   ctrl.base <- trainControl(method = "repeatedcv", number = num_folds, 
                             repeats = num_repeats,
@@ -178,7 +178,7 @@ train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
                       trControl = ctrl.base)
   
   # Train the past only model
-  print("Training Past Information Model. . . ")
+  message("Training Past Information Model. . . ")
   set.seed(69)
   model.past <- train(form.past,
                       data = model_dat.train,
@@ -188,7 +188,7 @@ train_model <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
                       trControl = ctrl.base)
   
   # Train full model
-  print("Training Full Information Model. . .")
+  message("Training Full Information Model. . .")
   set.seed(69)
   model.full <- train(form.full,
                       data = model_dat.train,

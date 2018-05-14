@@ -25,8 +25,122 @@ persuasion is correlated with their previous attempts to change other user
 opinions. Additional user information, not directly applicable to reciprocity or
 self-affirmation,  is utilized as a means of classing similar users.
 
+# Introduction / Literature Review
 
-# Introduction
+## Persuasion
+
+Persuasion, a goal in a number of settings, from political and marketing
+campaigns to friendly or professional conversations, has been the subject of
+significant research efforts [@tan2016winning; @dillard2002persuasion]. Before
+the advent of social media websites like Facebook or Reddit, these research
+efforts were mostly confined to laboratory settings, but thanks to the
+increasing number of social interactions online, interpersonal persuasion has
+become observable on a massive scale [@fogg2008mass].
+
+Tan et al. explored persuasion in /r/changemyview (CMV), an area of the popular
+social media website Reddit [-@tan2016winning]. CMV is particularly conducive to
+the study of mass interpersonal persuasion, as posters must state the reasoning
+behind their views, and successful arguments must be awarded with explicit
+confirmation. Thus, the outcome of the persuasion efforts, reasoning behind
+people's views, and the full interactions are accessible.
+
+With access to this information, Tan et al. focused primarily on how interaction
+dynamics and choice of language within arguments were associated with a
+successful change in someone's opinion. A third focus of the study was an
+attempt to determine the malleability of an opinion, i.e. the likelihood that
+the holder of that opinion would award successful arguments to change it.
+Assuming that at least 10 unique challengers to the opinion were present, and
+that the holder of the opinion responded at least once, Tan et al. analyzed the
+way in which the opinion was presented and attempted to predict whether or not
+it could be changed.
+
+This last task, attempting to determine the malleability of an opinion without
+respect to any of the arguments attempting to change it, was difficult indeed,
+and Tan et al. only achieved an ROC AUC of .54. Still, using weighted logistic
+regression, they found some significant features consistent with
+self-affirmation theory [@cohen2000beliefs; @correll2004affirmed].
+
+## Self-Affirmation Theory
+
+> "[S]elf-affirmation theory . . . suggests that every person strives for
+positive self-regard and, to achieve it, draws on successes in important domains
+in her or his life. These domains constitute aspects of individual identity,
+including important social roles, abilities, and beliefs. Because the individual
+depends on a constellation of domains for feelings of adequacy, a threat to one
+of the domains can prompt a defensive reaction. A crucial tenet of
+self-affirmation theory, though, is that the ultimate goal of a defensive
+reaction is the security of the global sense of self-worth, no the security of
+the domain, per se. The individual should defend a given domain only to the
+degree that the more general sense of self-worth is compromised by its loss."
+
+[@correll2004affirmed]
+
+In psychology, self-affirmation, which can be thought to reinforce one's global
+sense of self-worth, has been found to indicate open-mindedness and make beliefs
+more likely to yield [@correll2004affirmed; @cohen2000beliefs].
+
+Tan et al. found that within the text of an opinion, the use of first person
+pronouns were strong indicators of malleability, but first person plural
+pronouns correlated with resistance.
+
+> "[I]ndividualizing one's relationship with a belief using the first person
+pronouns affirms the self, while first person plurals can indicate a dilluted
+sense of group responsibility for the view."
+
+[@tan2016winning]
+
+While Tan et al. attempted to derive the level of self-affirmation present
+within the stating of an opinion, the user stating that opinion can have other
+sources of self-affirmation. Returning to Correll:
+
+> "[I]f global self-worth is temporarily bolstered by success in a second, unrelated domain, the individual should be more willing to tolerate a threat to the domain of interest."
+
+Looking at the wording of the opinion itself is a related domain, but it is
+reasonable to assume that if a Redditor has previous submission and comment
+history, that some of that history is unrelated to the opinion they are
+presenting for change in CMV. Additionally, self-affirmation theory does not
+restrict the source of bolstering one's global self-worth; it can be
+self-affirmation or affirmation from third parties.
+
+Thus, within past submissions and comments one can look at the same features as
+Tan et al., first person singular and plural pronouns for self-affirmation, but
+also for features that are indicative of third party affirmation, like the
+score, given by other users, of the comment or submission in question.
+
+All of a Reddit user's past submission history is available for perusal, as well
+as 1000 of the most recent, top-scoring, "hottest", and most "controversial"
+comments. Exploring the affirming nature of this history allows a deeper testing
+of self-affirmation theory, as a lab experiment can only really test the history
+created within the lab settings itself. Cohen et. al (2000), for example. . .
+
+> [A]sked half of their participants to write a paragraph about an important
+value (to affirm their sense of self-worth) before exposing them to arguments
+that challenged their views on capital punishment or abortion. Compared with
+control participants who wrote about less important values, those who wrote
+about a central value were more willing to recognize the strengths of the
+challenging argument.
+
+Utilizing a Reddit user's past submission and comment history, on the other
+hand, not only allows a more extended look into instances in which self and
+third party affirmation may have occurred, but it also provides instances of
+participation with the community that the view is being exposed to. If a Reddit
+user posited their opinion to CMV, but also had previous submissions and
+comments within the CMV community, then that participation would be relevant,
+but previous participation in other subreddits can also be more or less relevant
+as well. CMV does not establish any barriers (besides following the subreddit
+rules), against first-time participation from other Reddit users new to CMV. If
+a user posts an opinion on CMV, but has also attempted to change an opinion on
+CMV, then it's possible that these attempts may or may not have changed the view
+(receiving or not receiving explicit recognition). Looking at past participation
+within CMV, a notion of reciprocity might be present; users who have had their
+comments awarded for changing other opinions might be more yielding with their
+own comments.
+
+Tan et al. extended self-affirmation theory as it was onto an online debate
+space. Utilizing an opinion author's past interactions in CMV can possibly
+extend self-affirmation theory itself, by looking further back in time to
+potential affirmation, but also shed more light on the unique characterstics of
+Reddit and CMV in general
 
 # Data
 
@@ -81,7 +195,7 @@ change their opinion?"
 ## Exploring the Data Used
 
 ```{r, echo=FALSE, message=FALSE, results='hide'}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = F, error = F)
 source("explore_data.R")
 
 expl <- explore_data()
@@ -143,7 +257,6 @@ require(lubridate)
                linetype = 1, color = "gray") + 
   geom_text(mapping=aes(x=ymd("20161108"), y=0, label="2016 Election"), size=4, angle=90, vjust=-0.4, hjust=-2.2)
  )
-
 (
   expl$plots$day_activity +
     labs(title = "2016 CMV Submission Activity by Hour",
@@ -215,7 +328,7 @@ cat(read_file(expl$tables$stargazer_fp))
 
 ## Model Selection, Comparison, and Performance Evaluation
 
-Given one of the more quixotic aspects of this study, that is, the prediction of
+Given the quixotic aim of this study, that is, the prediction of
 the opinion malleability of individuals on the internet, the choice of model(s)
 to use, different iterations of these models to compare, and how to evaluate
 their importance are issues that must be addressed. The 3 groups of features I 
@@ -479,7 +592,7 @@ Below I give a coefficient plot of the three models, sorted by magnitude of thei
 effects displayed below pertain to a one standard deviation increase of the variable 
 in question.
 
-```{r show_coef, message=F}
+```{r show_coef, fig.width=11, fig.height=9.5, out.extra='angle=90'}
 # Make the names great again
 pm$coef_plot
 ```
@@ -686,10 +799,13 @@ graph_cohort_cis <- function(ci_vals, var){
            subtitle = "Varying Submission History Cutoff Under the Full Model",
            color = "Significant?"
            ) + 
-    scale_color_manual(values=col)
+    scale_color_manual(values=col) + 
+    geom_hline(aes(yintercept = 0), linetype = 2)
 }
 
 # [1] mean date
+# [10] similarity score
+# [3] # Submissions within Cutoff
 
 cohort_graphs <- unique(ci_vals$Coefficient) %>%
   map(~graph_cohort_cis(ci_vals = ci_vals, var = .))
@@ -704,31 +820,80 @@ more relevant for the given cohort until the cutoff expands.
 
 ### Reinforcing Previous Findings
 
+Utilizing the cohort approach, I find that some author history variables have robust
+significance across changing definitions of submission history cutoffs.
+
 ```{r}
 cohort_graphs[[2]]
 cohort_graphs[[7]]
+cohort_graphs[[15]]
+cohort_graphs[[4]]
+```
+
+In the grahps above, for instance, we see that the [community norms
+findings](#Community-Norms), and those of [singular first person pronouns](#Singular) and [plural first person pronouns](#Plural) 
+are mostly stable through differing submission history cutoffs.
+
+### Refuting or Fleshing Out Previous Findings
+
+In some cases, the specific cutoff chosen under the standard approach resulted in variable
+significance and effect direction that, in light of the cohort approach, seem to be
+incorrect or part of a larger pattern. 
+
+```{r counter_ev}
+# 9 Unique subreddits
+# 3 Within cutoff
+# 14 Gini (direction change)
+cohort_graphs[[9]]
+```
+
+For instance, for the [# Unique subreddits posted in](#Unique-Subreddits-Posted-In), the standard approach showed
+a negative significant effect, but the cohort approach shows that this
+significance and direction instead appear to be an anomaly of the data.
+
+```{r}
+# 9 Unique subreddits
+# 3 Within cutoff
+# 14 Gini (direction change)
+# 10 similarity score
+cohort_graphs[[3]]
+cohort_graphs[[10]]
+```
+For [# Submissions within the history cutoff](#Submissions-within-1-year-before-1st-CMV-Post), the opposite is true.
+That is, within the confines of the standard approach, this variable seemed insignificant, but the cohort approach bears
+out that under most other cutoffs, this variable is significant, although in a
+slightly counterintuitive direction. Under the self-affirmation framework, one
+might expect the opposite effect, that the "self-affirmation" that occurs via a
+subject author making submissions to make it more likely for the first opinion
+to change. However, even adjusting for the similarity between these submissions and 
+the first opinion, the effect is negative. The similarity score however behaves mostly the way
+it did under the standard approach.
+
+```{r}
+# 14 Gini (direction change)
 cohort_graphs[[14]]
 ```
-```{r cohort_sub_age}
-sub_age <- read_rds("model_data/cohort_{cohort_num}_sub_age_mdb_{max_days_between}.rds")
 
-sub_age.gb <- sub_age %>% 
-  dplyr::group_by(day_age) %>%
-  dplyr::summarise(n = n(),
-                   n_per_auth = n / cohort_size
-                   )
-
-sub_age %>%
-  ggplot(aes(day_age)) +
-    geom_line(stat = "density")
-
-sub_age.gb %>% 
-  ggplot(aes(day_age, n_per_auth)) + 
-    geom_line() + 
-    geom_smooth()
-```
+The behavior of the [subreddit gini index](#Subreddit-Gini-Index) under the
+cohort approach is perhaps the most interesting. Increasing the cutoff from 90 to
+180 days (and beyond) results in an apparent effect flip. If only taking earlier
+history into account, it seems that more concentrated submission activity within a few
+subreddits (higher Gini) increases the odds for a first opinion change, but if
+that behavior is born out past half a year, then the odds actually decrease. Clearly, any blanket 
+notions about subreddit submission "equality" must be evaluated in the context of the time period
+when the submissions were made.
 
 # Conclusion
+
+This study attempts the nigh insourmountable task of predicting opionion malleability
+for a self-selected group of Reddit users, all while effectively eschewing a detailed
+analysis of the relevant debate and opting to rely on the user histories. Unsurprisingly,
+traditional performance metrics like ROC, sensitivty, and specificty reinforce the difficulty
+of such a task, but also display that traction for the problem is indeed
+possible. Opting for a more interpretable model allows for an analysis based on
+self-affirmation theory, pronoun usage, and relevant Reddit-specific heuristics. This analysis has
+reiterated, often in novel ways, the relevance of self-affirmation, pronoun
+useage, and opinion timing for r/ChangeMyView opinion malleability.
 
 ## Limitations
 
@@ -947,6 +1112,34 @@ whether they be direct comments, OP comments, or arbitrarily nested comments in 
 comment tree. This feature helps to flesh out the "debates within the debates" that
 take place in a CMV post.
 
-## Notes on the "Cohort" Approach
+## The "Cohort" Approach
+
+### Remaining Graphs
+
+```{r rest_of_cohort}
+COHORT_USED <- c(1, 2, 3, 4, 7, 9, 10, 14, 15)
+cohort_graphs[c(5, 6, 8, 11, 12, 13)]
+```
+
+### Alternative Approaches
+```{r cohort_sub_age}
+sub_age <- read_rds("model_data/cohort_{cohort_num}_sub_age_mdb_{max_days_between}.rds")
+
+sub_age.gb <- sub_age %>% 
+  dplyr::group_by(day_age) %>%
+  dplyr::summarise(n = n(),
+                   n_per_auth = n / cohort_size
+                   )
+
+sub_age %>%
+  ggplot(aes(day_age)) +
+    geom_line(stat = "density")
+
+sub_age.gb %>% 
+  ggplot(aes(day_age, n_per_auth)) + 
+    geom_line() + 
+    geom_smooth()
+```
+
 
 # Citations

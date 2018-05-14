@@ -24,10 +24,11 @@ present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max
   require(coefplot)
   require(caret)
   require(glue)
+  require(lubridate)
   
   out_fp <- glue("figs/result_plots/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}_k_{num_folds}_rep_{num_repeats}{tag}.rds")
   if (file.exists(out_fp) & !overwrite){
-    print(as.character(glue("Skipping creation of '{out_fp}' (exists)")))
+    message(as.character(glue("Skipping creation of '{out_fp}' (exists)")))
     return(read_rds(out_fp))
   }
   result_plots <- list()
@@ -44,6 +45,7 @@ present_models <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA, max
             xlab = "Log Odds Value",
             single = FALSE,
             sort = "magnitude",
+            outerCI = 0,
             # horizontal = TRUE,
             # pointSize = 4,
             scales = "fixed") + 
@@ -150,7 +152,7 @@ comp_cohort_cis <- function(tag = TAG){
   ci_vals <- CH_DB %>% map(~present_models(max_days_between = ., tag = TAG) %$%
                                 coef_plot %$%
                                 data %>%
-                                 dplyr::filter(Model == "model.full",
+                                 dplyr::filter(Model == "model.past",
                                               ) %>%
                                  dplyr::select(Coefficient, contains("Inner"))
                                 )
@@ -174,7 +176,7 @@ comp_cohort_cis <- function(tag = TAG){
                                 )
                          )
     ) %>%
-    filter(grepl("^\\(AH\\)", Coefficient)) %>%
+    filter(grepl("^\\(AH\\)", Coefficient) | grepl("^\\(Pre Debate\\) Similarity Score", Coefficient)) %>%
     mutate(sig = ifelse((LowInner < 0) & (0 < HighInner), "red", "green"))
   
   (ci_vals)

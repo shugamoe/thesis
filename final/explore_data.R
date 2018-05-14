@@ -118,7 +118,7 @@ explore_data <- function(lsa_topics = CHOICE_LSA, lda_topics = CHOICE_LDA,
   
   out_fp <- glue("exploration_objects/db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}{tag}.rds") 
   if (file.exists(out_fp)){
-    print(as.character(glue("Skipping (exists) '{out_fp}'")))
+    message(as.character(glue("Skipping (exists) '{out_fp}'")))
     return()
   }
   

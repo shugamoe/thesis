@@ -76,7 +76,7 @@ process_data <- function(lsa_topics = CHOICE_LSA,
   
   out_fp <- glue("model_data/model_dat_db_{max_days_between}_ltv_{lsa_topics}_ldatv_{lda_topics}{tag}.rds")
   if (file.exists(out_fp) & !overwrite){
-    print(as.character(glue("Skipping (exists) '{out_fp}'")))
+    message(as.character(glue("Skipping (exists) '{out_fp}'")))
     return()
   }
   
@@ -86,11 +86,11 @@ process_data <- function(lsa_topics = CHOICE_LSA,
                        username="jmcclellan",
                        password="udaeTh5b"
       ),
-    error = print("Didn't connect to DB")
+    error = message("Didn't connect to DB")
     )
   
   if (dl_data){
-    print("Downloading Data")
+    message("Downloading Data")
     cmv_coms <- dbcon %>%
       tbl("CMV_Comment") %>%
       collect()
@@ -110,7 +110,7 @@ process_data <- function(lsa_topics = CHOICE_LSA,
       collect()
     
   } else {
-    print("Loading from raw data")
+    message("Loading from raw data")
     cmv_coms <- read_rds("pre_model_data/db_data/cmv_coms_raw.rds")
     cmv_subs <- read_rds("pre_model_data/db_data/cmv_subs_raw.rds")
     std_subs <- read_rds("pre_model_data/db_data/std_subs_raw.rds")
@@ -558,7 +558,7 @@ fix_dat <- function(){
     walk(~ add_rm_cmv_subs(cmv_subs_raw = cmv_subs, db = .))
 }
 
-if (!interactive()) {
+if (interactive()) {
   all_process_data()
   # quickfixes
   fix_dat()
