@@ -96,38 +96,35 @@ sources of self-affirmation. Returning to Correll:
 > "[I]f global self-worth is temporarily bolstered by success in a second, unrelated domain, the individual should be more willing to tolerate a threat to the domain of interest."
 
 Looking at the wording of the opinion itself is a related domain, but it is
-reasonable to assume that if a Redditor has previous submission and comment
+reasonable to assume that if a Redditor has previous submission
 history, that some of that history is unrelated to the opinion they are
 presenting for change in CMV. Additionally, self-affirmation theory does not
 restrict the source of bolstering one's global self-worth; it can be
 self-affirmation or affirmation from third parties.
 
-Thus, within past submissions and comments one can look at the same features as
+Thus, within past submissions one can look at the same features as
 Tan et al., first person singular and plural pronouns for self-affirmation, but
 also for features that are indicative of third party affirmation, like the
-score, given by other users, of the comment or submission in question.
+score, given by other users, of the submission in question.
 
-All of a Reddit user's past submission history is available for perusal, as well
-as 1000 of the most recent, top-scoring, "hottest", and most "controversial"
-comments. Exploring the affirming nature of this history allows a deeper testing
-of self-affirmation theory, as a lab experiment can only really test the history
+Nearly all of a Reddit user's past submission history is available for perusal.
+Exploring the affirming nature of this history allows a deeper testing of
+self-affirmation theory, as a lab experiment can only really test the history
 created within the lab settings itself. Cohen et. al (2000), for example. . .
 
-> [A]sked half of their participants to write a paragraph about an important
+> [The researchers] asked half of their participants to write a paragraph about an important
 value (to affirm their sense of self-worth) before exposing them to arguments
 that challenged their views on capital punishment or abortion. Compared with
 control participants who wrote about less important values, those who wrote
 about a central value were more willing to recognize the strengths of the
 challenging argument.
 
-Utilizing a Reddit user's past submission and comment history, on the other
+Utilizing a Reddit user's past submission history, on the other
 hand, not only allows a more extended look into instances in which self and
-third party affirmation may have occurred, but it also provides instances of
-participation with the community that the view is being exposed to. If a Reddit
-user posited their opinion to CMV, but also had previous submissions and
-comments within the CMV community, then that participation would be relevant,
-but previous participation in other subreddits can also be more or less relevant
-as well. CMV does not establish any barriers (besides following the subreddit
+third party affirmation may have occurred, but also provides natural language
+processing models data to quantify the "similarity" or "relatedness" between the 
+past submission history and opinions made thereafter.
+CMV does not establish any barriers (besides following the subreddit
 rules), against first-time participation from other Reddit users new to CMV. If
 a user posts an opinion on CMV, but has also attempted to change an opinion on
 CMV, then it's possible that these attempts may or may not have changed the view
@@ -137,10 +134,9 @@ comments awarded for changing other opinions might be more yielding with their
 own comments.
 
 Tan et al. extended self-affirmation theory as it was onto an online debate
-space. Utilizing an opinion author's past interactions in CMV can possibly
-extend self-affirmation theory itself, by looking further back in time to
-potential affirmation, but also shed more light on the unique characterstics of
-Reddit and CMV in general
+space. Utilizing an opinion author's past submissions could extend the relevance
+of self-affirmation theory beyond the most recent past, by looking further back in time to
+potential affirmation.
 
 # Data
 
@@ -883,21 +879,79 @@ that behavior is born out past half a year, then the odds actually decrease. Cle
 notions about subreddit submission "equality" must be evaluated in the context of the time period
 when the submissions were made.
 
-# Conclusion
-
-This study attempts the nigh insourmountable task of predicting opionion malleability
-for a self-selected group of Reddit users, all while effectively eschewing a detailed
-analysis of the relevant debate and opting to rely on the user histories. Unsurprisingly,
-traditional performance metrics like ROC, sensitivty, and specificty reinforce the difficulty
-of such a task, but also display that traction for the problem is indeed
-possible. Opting for a more interpretable model allows for an analysis based on
-self-affirmation theory, pronoun usage, and relevant Reddit-specific heuristics. This analysis has
-reiterated, often in novel ways, the relevance of self-affirmation, pronoun
-useage, and opinion timing for r/ChangeMyView opinion malleability.
-
 ## Limitations
 
+Much of the effort of this thesis lies in the infrastructure I created to gather the
+raw data from Reddit, through its API. Thus, the relevant limitations of that API
+undercut all of the data provided in this study.  In the [data section](#Data), I have already discussed the issue with
+not being able to access certain data due to author or moderator removal, but
+the Reddit API also provides limits on access to user submissions. Through the
+API, one can only access 1000 of a Redditor's most recent, "hottest", "top", or
+"controversial" comments. Thus, if a user has over 1000 submissions, there is no
+guarantee of being able to retrieve *all* of the rest of that user's submissions
+(by finding union of submissions found under the other 3 sorting criteria).
+Fortunately, most users have under 1000 submissions, but the same cannot be said
+for comments, which face the  same issue. Since users in general post more
+comments than submissions, more users have over 1000 comments, and thus
+utilizing comments becomes fraught with a missing data problem on an semi-known
+scale. This is why this thesis eschews the use of comments as part of a subject
+author's history. 
+
+For many of these issues, I suspect whatever features internal Reddit teams must
+have allowing them to provide targeted advertising would be an effective pancea.
+An insider with a more solid assurance of "data completeness" would be very well
+positioned to thoroughly explore r/ChangeMyView, it's opinions, norms, and
+participants.
+
 ## Extensions
+
+r/ChangeMyView has existed since 2013, and thus the most obvious extension would
+be to  include *all* possible data for review. Though, as previously discussed,
+increased complexity of time trends as well and the increased likelihood for
+missing data would loom even larger over the endeavour. Assuming that access to
+a version of "insider" data is impossible for researchers, the Reddit API could
+be utilized to ensure access to higher quality future data. In realtime, authors
+of CMV submissions could be identified, and their prior submission and comment
+history gathered *then*, to minimize missing data through API limitations or
+moderator/user removal. Comments of these submissions, and alterations to these
+comments could also be tracked, ensuring a more complete history of activity on
+r/ChangeMyview.
+
+Additionally, my thesis, with the exception of a few features, almost completely
+ignored the *context* in which a subject author's prior submissions took place.
+For example, the language of other Reddit users commenting on a subject author's
+prior submission may have had some influence as  the direct feedback to that
+author's participation. While including such information would contribute to the
+already sizeable parameter space of this thesis, it would also provide a more
+detailed means to  differentiate between submission history.
+
+More attention could be paid to CMV's propensity for topics to be influenced by
+news cycles, additional NLP and time series tools could be utilized in an attempt
+to characterize the relationship between CMV, news, and opinion malleability.
+
+# Conclusion
+
+This study attempts the nigh insourmountable task of predicting opionion
+malleability for a self-selecting group of Reddit users, all while effectively
+eschewing a detailed analysis of the relevant debate and opting to rely on the
+user histories. Coupled with the inherently difficult task is the ephemeral
+nature of the data being collected and a complicated pre model-training
+parameter space to determine what history to analyze, and nuances of natural
+language processing topic models to use.  Unsurprisingly, traditional
+performance metrics like ROC, sensitivty, and specificty reinforce the
+difficulty of such a task, but also display that traction for the problem is
+indeed possible. Opting for a more interpretable model allows for an analysis
+based on self-affirmation theory, pronoun usage, and relevant Reddit-specific
+heuristics. The analysis has reiterated, often in novel ways, the relevance of
+self-affirmation, pronoun useage, and opinion timing for r/ChangeMyView opinion
+malleability, while also drawing attention to notions of participation
+"diversity" by utilizing features like unique subreddits submitted to, and
+subreddit gini index. Hopefully the  effort undertaken here demonstrates the
+novelty of the data available at r/ChangeMyView, and while that novelty doesn't
+engender the findings here to be generalized in other important debate spaces,
+it is an intriguing place to explore the relationship between opinion
+malleability, persuasion related theory and the unique aspects of Reddit and CMV
+itself.
 
 # Appendix
 
@@ -974,7 +1028,7 @@ the "success" of self-affirmation provided by the submissions.
 This feature counts the subject author's previous "unsuccessful" earlier attempts
 at posting to r/ChangeMyView. CMV posts counted in this feature are those that
 are removed for some violation of the rules of the subreddit. Given the self-selective
-nature of CMV participants, unsucessful earlier integration into the community
+nature of CMV participants, unsuccessful earlier integration into the community
 as measured through removed CMV posts could be an important feature to keep track
 of.
 
@@ -1080,10 +1134,10 @@ subject author awarded at least 1 delta in their submission, indicating that the
 subject author changed their opinion.
 
 As alluded to previously, it is possible for comments on an CMV opinion to be 
-awarded deltas from Reddit users besides the subject author. Presumedly, Redditors
+awarded deltas from Reddit users besides the subject author. Presumably, Redditors
 who awarded such deltas share at the general opinion that the subject author has,
 but because these deltas are relatively rare and there is no mechanism to glean
-these Redditors' reasonings why they hold the opinion, such deltas are not taken
+these Redditors' reasons why they hold the opinion, such deltas are not taken
 into account.
   
 #### # Direct Comments
