@@ -1,7 +1,7 @@
 ---
-title: "Opinion Malleability in r/ChangeMyView | An Exploration of Self-Affirmation other Historical Information"
-author: "Julian McClellan"
-date: "April 1, 2018"
+title: ""
+author: ""
+date: ""
 output: 
   pdf_document:
     toc: true
@@ -14,16 +14,18 @@ bibliography: citations.bib
 
 # Abstract
 
-Using information from the good faith debate subreddit r/ChangeMyView, this paper
+Focusing on the good faith debate subreddit r/ChangeMyView, this paper
 utilizes historical information on users who submit their opinion in this debate
 space, in order to see whether this information can be used to predict whether
 said users will end up changing their opinion in the face of persuasion. Some
 user history is evaluated under the psychological theory of self-affirmation, in
-an attempt to test the  theory's viability in an online context. Another concept
-tested is the idea of "community reciprocity", where users' susceptibility to
-persuasion is correlated with their previous attempts to change other user
-opinions. Additional user information, not directly applicable to reciprocity or
-self-affirmation,  is utilized as a means of classing similar users.
+an attempt to further test the theory's viability in an online context. Additional
+user information, not directly applicable to reciprocity or self-affirmation,
+such as notions of subreddit diversity and equality of participation is
+utilized as a means of classing similar users. This paper finds some evidence of
+the applicability of self-affirmation theory to online debate spaces, the relevance
+of other Reddit-specific indicators, and other differences between those with
+malleable and static opinions.
 
 # Introduction / Literature Review
 
@@ -42,7 +44,9 @@ social media website Reddit [-@tan2016winning]. CMV is particularly conducive to
 the study of mass interpersonal persuasion, as posters must state the reasoning
 behind their views, and successful arguments must be awarded with explicit
 confirmation. Thus, the outcome of the persuasion efforts, reasoning behind
-people's views, and the full interactions are accessible.
+people's views, and the full interactions are accessible. Additionally, with the
+emphasis Reddit as a whole places on long-form content [@longform], these interactions provide
+substantial data for training natural language processing models.
 
 With access to this information, Tan et al. focused primarily on how interaction
 dynamics and choice of language within arguments were associated with a
@@ -121,28 +125,20 @@ challenging argument.
 
 Utilizing a Reddit user's past submission history, on the other
 hand, not only allows a more extended look into instances in which self and
-third party affirmation may have occurred, but also provides natural language
-processing models data to quantify the "similarity" or "relatedness" between the 
-past submission history and opinions made thereafter.
-CMV does not establish any barriers (besides following the subreddit
-rules), against first-time participation from other Reddit users new to CMV. If
-a user posts an opinion on CMV, but has also attempted to change an opinion on
-CMV, then it's possible that these attempts may or may not have changed the view
-(receiving or not receiving explicit recognition). Looking at past participation
-within CMV, a notion of reciprocity might be present; users who have had their
-comments awarded for changing other opinions might be more yielding with their
-own comments.
-
-Tan et al. extended self-affirmation theory as it was onto an online debate
-space. Utilizing an opinion author's past submissions could extend the relevance
-of self-affirmation theory beyond the most recent past, by looking further back in time to
-potential affirmation.
+third party affirmation may have occurred, but also provides NLP models data to
+quantify the "similarity" or "relatedness" between the
+past submission history and opinions made thereafter. Tan et al. extended
+self-affirmation theory as it was onto an online debate space. Utilizing an
+opinion author's past submissions could extend the relevance of self-affirmation
+theory beyond the most recent past, by looking further back in time for potential
+affirmation.
 
 # Data
 
 ## Overview of Data Source: r/ChangeMyView
 
-The popular social media site, Reddit, is composed of a variety of subcommunities, or "subreddits". One such subreddit, r/ChangeMyView (CMV):
+The popular social media site, Reddit, is composed of a variety of
+subcommunities, or "subreddits". One such subreddit, r/ChangeMyView (CMV):
 
 > . . . is a subreddit dedicated to the civil discourse of opinions, and is built around
 the idea that in order to resolve our differences, we must first understand them.
@@ -150,7 +146,7 @@ We believe that productive conversation requires respect and openness, and that
 certitude is the enemy of understanding.
  
 Redditors can participate in CMV in one of two main ways. They can post their *opinions*,
-along with supporting reasoning, as *submissions*, or they can *comment* directly on  a submission in an
+along with supporting reasoning, as *submissions*, or they can *comment* directly on a submission in an
 *attempt to change the opinion*. If a user posts a view, the subreddit's rules
 require them to respond to any comments, attempts to change the view, within
 three hours otherwise the post is removed. The rules of CMV also 
@@ -726,7 +722,7 @@ framework this is difficult to determine.
 ### Community Norms
 
 Like many subreddits, r/ChangeMyView has a [variety of rules when it comes to submitting
-or commenting.](https://www.reddit.com/r/changemyview/wiki/rules). In some cases,
+or commenting.](https://www.reddit.com/r/changemyview/wiki/rules) In some cases,
 subject authors may have attempted to post an opinion submission on CMV, only to
 have it removed due to rule violations. Because these removed opinions cannot be
 changed, they are not counted as the subject author's "first" opinion
@@ -927,7 +923,9 @@ detailed means to  differentiate between submission history.
 
 More attention could be paid to CMV's propensity for topics to be influenced by
 news cycles, additional NLP and time series tools could be utilized in an attempt
-to characterize the relationship between CMV, news, and opinion malleability.
+to characterize the relationship between CMV, news, and opinion malleability. Thorough
+analysis of CMV's self-documenting structures like the r/Deltalog and the Deltaboards
+would prove useful in this respect.
 
 # Conclusion
 
@@ -942,11 +940,16 @@ performance metrics like ROC, sensitivty, and specificty reinforce the
 difficulty of such a task, but also display that traction for the problem is
 indeed possible. Opting for a more interpretable model allows for an analysis
 based on self-affirmation theory, pronoun usage, and relevant Reddit-specific
-heuristics. The analysis has reiterated, often in novel ways, the relevance of
+heuristics. 
+
+The analysis has reiterated the relevance of
 self-affirmation, pronoun useage, and opinion timing for r/ChangeMyView opinion
 malleability, while also drawing attention to notions of participation
 "diversity" by utilizing features like unique subreddits submitted to, and
-subreddit gini index. Hopefully the  effort undertaken here demonstrates the
+subreddit gini index. Additionally, this study has provided some evidence that subjects
+on CMV with more malleable opinions are easier to detect with pre-debate
+information and author history compared to change resistant subjects.
+Hopefully the  effort undertaken here demonstrates the
 novelty of the data available at r/ChangeMyView, and while that novelty doesn't
 engender the findings here to be generalized in other important debate spaces,
 it is an intriguing place to explore the relationship between opinion
@@ -1166,17 +1169,17 @@ whether they be direct comments, OP comments, or arbitrarily nested comments in 
 comment tree. This feature helps to flesh out the "debates within the debates" that
 take place in a CMV post.
 
-## The "Cohort" Approach
+<!-- ## The "Cohort" Approach -->
 
-### Remaining Graphs
+<!-- ### Remaining Graphs -->
 
-```{r rest_of_cohort}
+```{r rest_of_cohort, eval=F}
 COHORT_USED <- c(1, 2, 3, 4, 7, 9, 10, 14, 15)
 cohort_graphs[c(5, 6, 8, 11, 12, 13)]
 ```
 
-### Alternative Approaches
-```{r cohort_sub_age}
+<!-- ### Alternative Approaches -->
+```{r cohort_sub_age, eval=F}
 sub_age <- read_rds("model_data/cohort_{cohort_num}_sub_age_mdb_{max_days_between}.rds")
 
 sub_age.gb <- sub_age %>% 
